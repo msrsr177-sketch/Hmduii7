@@ -1,0 +1,60 @@
+name: Build Android APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Web
+        run: |
+          npm install
+          npm run build --if-present
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Initialize Capacitor
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          [ -d "build" ] && mv build dist || true
+          if [ ! -f "capacitor.config.json" ]; then
+            npx cap init "MyApp" "com.app.ai" --web-dir dist
+          fi
+          npx cap add android || true
+          npx cap sync android
+
+      - name: Force Fix Dependencies
+        run: |
+          # سطر سحري لإجبار أندرويد على حل تضارب المكتبات تلقائياً
+          echo "android.useAndroidX=true" > android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          
+          # تعديل ملف البناء الأساسي لإلغاء تكرار ملفات Kotlin
+          sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk7") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
+          sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk8") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-final-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
