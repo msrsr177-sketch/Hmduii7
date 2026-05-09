@@ -1,0 +1,50 @@
+name: Manual Final Fix
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment Setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # تغيير الإصدار لزيادة التوافق مع Capacitor 
+
+      - name: Build Web
+        run: |
+          npm install
+          [ -f "src/index.html" ] && cp src/index.html . || true
+          npm run build
+
+      - name: Capacitor Clean Rebuild
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          rm -rf android
+          npx cap init "MySmartApp" "com.msrsr.ai" --web-dir dist
+          npx cap add android
+          npx cap sync android
+
+      - name: Gradle Force Fix
+        run: |
+          cd android
+          # إجبار أندرويد على استخدام نسخة واحدة من مكتبات Kotlin المتصارعة
+          printf "\nconfigurations.all {\n    resolutionStrategy.eachDependency { DependencyResolveDetails details ->\n        if (details.requested.group == 'org.jetbrains.kotlin') {\n            details.useVersion '1.9.0'\n        }\n    }\n}" >> app/build.gradle
+          echo "kotlin.stdlib.default.dependency=false" >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Get My APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-App-Success
+          path: android/app/build/outputs/apk/debug/app-debug.apk
