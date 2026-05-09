@@ -1,47 +1,53 @@
-name: Fixed AI Build
+name: Nuclear Clean Build
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Environment
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
+      
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: Build Web
+      - name: Build Web Application
         run: |
           npm install
-          # نسخ الملف للخارج إذا كان مفقوداً
+          # نقل ملف الـ HTML إذا كان داخل src
           [ -f "src/index.html" ] && cp src/index.html . || true
           npm run build
 
-      - name: Capacitor Force Setup
+      - name: Fresh Capacitor Install (No Old Files)
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          # حذف المجلد القديم لضمان بداية نظيفة
+          # الحذف الجذري للمجلد القديم لمنع تكرار الكلاسات
           rm -rf android 
-          # إنشاء ملف الإعدادات بهوية التطبيق تلقائياً
-          npx cap init "MyAIApp" "com.msrsr.ai" --web-dir dist
+          npx cap init "MySmartApp" "com.msrsr.ai" --web-dir dist
           npx cap add android
           npx cap sync android
 
-      - name: Build Final APK
+      - name: Force Clean Gradle Build
         run: |
           cd android
+          # إجبار جافا على تجاهل المكتبات المتكررة
           echo "kotlin.stdlib.default.dependency=false" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew clean assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Export Final APK
         uses: actions/upload-artifact@v4
         with:
-          name: Successful-Build
+          name: AI-App-Success
           path: android/app/build/outputs/apk/debug/app-debug.apk
