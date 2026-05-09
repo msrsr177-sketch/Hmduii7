@@ -1,4 +1,4 @@
-name: Ultimate Clean Build
+name: Final Success Build
 on:
   push:
     branches: [ main ]
@@ -19,26 +19,28 @@ jobs:
       - name: Build Web
         run: |
           npm install
+          # أمر احتياطي لنقل الملف إذا وجد داخل src
+          [ -f "src/index.html" ] && cp src/index.html . || true
           npm run build
 
-      - name: Fresh Android Install
+      - name: Capacitor Android Sync
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          # حذف مجلد الأندرويد القديم إذا وجد لضمان عدم التكرار
+          # حذف أي مخلفات قديمة للأندرويد لضمان عدم تكرار الملفات
           rm -rf android 
           npx cap add android
           npx cap sync android
 
-      - name: Fix Kotlin & Build
+      - name: Fix Kotlin & Build APK
         run: |
           cd android
-          # إجبار النظام على حل التضارب تلقائياً
+          # حل مشكلة Duplicate class found in modules نهائياً
           echo "kotlin.stdlib.default.dependency=false" >> gradle.properties
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload Final APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI-App-Success
+          name: My-AI-App
           path: android/app/build/outputs/apk/debug/app-debug.apk
