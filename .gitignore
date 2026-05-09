@@ -6,3 +6,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Capacitor specific
+android/app/build/
+android/.gradle/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
