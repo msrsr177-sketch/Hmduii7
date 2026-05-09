@@ -1,4 +1,4 @@
-name: Final Success Build
+name: Fixed AI Build
 on:
   push:
     branches: [ main ]
@@ -19,28 +19,29 @@ jobs:
       - name: Build Web
         run: |
           npm install
-          # أمر احتياطي لنقل الملف إذا وجد داخل src
+          # نسخ الملف للخارج إذا كان مفقوداً
           [ -f "src/index.html" ] && cp src/index.html . || true
           npm run build
 
-      - name: Capacitor Android Sync
+      - name: Capacitor Force Setup
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          # حذف أي مخلفات قديمة للأندرويد لضمان عدم تكرار الملفات
+          # حذف المجلد القديم لضمان بداية نظيفة
           rm -rf android 
+          # إنشاء ملف الإعدادات بهوية التطبيق تلقائياً
+          npx cap init "MyAIApp" "com.msrsr.ai" --web-dir dist
           npx cap add android
           npx cap sync android
 
-      - name: Fix Kotlin & Build APK
+      - name: Build Final APK
         run: |
           cd android
-          # حل مشكلة Duplicate class found in modules نهائياً
           echo "kotlin.stdlib.default.dependency=false" >> gradle.properties
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload Final APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: My-AI-App
+          name: Successful-Build
           path: android/app/build/outputs/apk/debug/app-debug.apk
