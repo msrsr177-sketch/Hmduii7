@@ -216,7 +216,7 @@ const COMPANIES = [
   { id: "xiaomi", name: "Xiaomi", count: 0 },
   { id: "huawei", name: "Huawei", count: 0 },
   { id: "infinix", name: "Infinix", count: 0 },
-  { id: "others", nameKey: "others", count: 0 },
+  { id: "others", name: "Others", nameKey: "others", count: 0 },
 ];
 
 export default function App() {
@@ -426,8 +426,8 @@ export default function App() {
       name: prodName,
       quantity: parseInt(prodQty) || 0,
       loc: prodLoc,
-      brand: prodBrand,
-      category: prodCategory || selectedCategory || "screens"
+      brand: prodBrand || "Others",
+      category: prodCategory || (selectedCategory && selectedCategory !== "all_inventory" && selectedCategory !== "maintenance" ? selectedCategory : "screens")
     };
     setProducts(prev => [newProduct, ...prev]);
     closeModals();
@@ -708,7 +708,7 @@ export default function App() {
                   className="grid grid-cols-2 lg:grid-cols-4 gap-4"
                 >
                   {folders.map((company) => {
-                    const prodCount = products.filter(p => p.category === "screens" && p.brand.toLowerCase() === company.name.toLowerCase()).length;
+                    const prodCount = products.filter(p => p.category === "screens" && p.brand?.toLowerCase() === (company.name || "").toLowerCase()).length;
                     return (
                       <motion.div
                         key={company.id}
