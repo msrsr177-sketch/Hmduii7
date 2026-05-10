@@ -34,7 +34,10 @@ import {
   FilePlus,
   X,
   Folders,
-  ArrowUpRight
+  ArrowUpRight,
+  Bell,
+  LogOut,
+  ChevronDown
 } from "lucide-react";
 import { useState, useMemo, FormEvent, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -114,7 +117,17 @@ const translations = {
     motherboard: "مذربورد",
     connectors: "كونكتر",
     chargingBase: "قاعدة شحن",
-    others: "شركات أخرى"
+    others: "شركات أخرى",
+    loginTitle: "تسجيل الدخول",
+    loginDesc: "اختر طريقة الدخول للبدء",
+    googleLogin: "تسجيل الدخول بجوجل",
+    guestLogin: "دخول كضيف",
+    notifications: "الإشعارات",
+    activityLog: "سجل النشاطات",
+    noNotifications: "لا توجد إشعارات جديدة",
+    notificationAdded: "تمت إضافة قطعة:",
+    notificationWithdrawn: "تم سحب قطعة:",
+    notificationWithdrawLimit: "تنبيه: مخزون منخفض!",
   },
   en: {
     title: "New Phone Maintenance",
@@ -188,7 +201,17 @@ const translations = {
     motherboard: "Motherboard",
     connectors: "Connectors",
     chargingBase: "Charging Base",
-    others: "Other Companies"
+    others: "Other Companies",
+    loginTitle: "Login",
+    loginDesc: "Choose your entry method",
+    googleLogin: "Sign in with Google",
+    guestLogin: "Enter as Guest",
+    notifications: "Notifications",
+    activityLog: "Activity Log",
+    noNotifications: "No new notifications",
+    notificationAdded: "Added item:",
+    notificationWithdrawn: "Withdrawn item:",
+    notificationWithdrawLimit: "Alert: Low Stock!",
   }
 };
 
@@ -225,6 +248,24 @@ export default function App() {
     return (saved as Language) || 'ar';
   });
   const t = translations[lang];
+
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const saved = localStorage.getItem('user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [activities, setActivities] = useState<any[]>(() => {
+    const saved = localStorage.getItem('activities');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [hasUnread, setHasUnread] = useState(() => {
+    return localStorage.getItem('hasUnread') === 'true';
+  });
+
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const [products, setProducts] = useState<any[]>(() => {
     const saved = localStorage.getItem('products');
@@ -290,6 +331,33 @@ export default function App() {
     localStorage.setItem('withdrawal_count', withdrawalCount.toString());
   }, [withdrawalCount]);
 
+  useEffect(() => {
+    localStorage.setItem('isLoggedIn', isLoggedIn.toString());
+    if (currentUser) localStorage.setItem('user', JSON.stringify(currentUser));
+    else localStorage.removeItem('user');
+  }, [isLoggedIn, currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('activities', JSON.stringify(activities));
+  }, [activities]);
+
+  useEffect(() => {
+    localStorage.setItem('hasUnread', hasUnread.toString());
+  }, [hasUnread]);
+
+  const addActivity = (title: string, desc: string, type: 'add' | 'withdraw' | 'alert') => {
+    const newActivity = {
+      id: Date.now(),
+      title,
+      desc,
+      type,
+      time: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-IQ' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString(lang === 'ar' ? 'ar-IQ' : 'en-US')
+    };
+    setActivities(prev => [newActivity, ...prev].slice(0, 50));
+    setHasUnread(true);
+  };
+
   const toggleReady = (id: number) => {
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -306,7 +374,16 @@ export default function App() {
   const withdrawProduct = (id: number) => {
     setProducts(prev => prev.map(p => {
       if (p.id === id) {
-        return { ...p, quantity: Math.max(0, p.quantity - 1) };
+        const newQty = Math.max(0, p.quantity - 1);
+        addActivity(
+          t.activity_withdraw,
+          `${t.notificationWithdrawn} ${p.name} (${t.quantity}: ${p.quantity} -> ${newQty})`,
+          'withdraw'
+        );
+        if (newQty < 3 && newQty > 0) {
+          addActivity(t.notificationWithdrawLimit, `${p.name} ${t.quantity}: ${newQty}`, 'alert');
+        }
+        return { ...p, quantity: newQty };
       }
       return p;
     }));
@@ -430,6 +507,11 @@ export default function App() {
       category: prodCategory || (selectedCategory && selectedCategory !== "all_inventory" && selectedCategory !== "maintenance" ? selectedCategory : "screens")
     };
     setProducts(prev => [newProduct, ...prev]);
+    addActivity(
+      t.activity_add,
+      `${t.notificationAdded} ${newProduct.name} (${t.quantity}: ${newProduct.quantity})`,
+      'add'
+    );
     closeModals();
   };
 
@@ -465,6 +547,76 @@ export default function App() {
     closeModals();
   };
 
+  const handleLogin = (method: 'google' | 'guest') => {
+    setIsLoggedIn(true);
+    setCurrentUser({
+      name: method === 'google' ? 'Hamad' : 'Guest User',
+      type: method,
+      avatar: method === 'google' ? 'https://ui-avatars.com/api/?name=Hamad&background=F43F5E&color=fff' : null
+    });
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans relative overflow-hidden flex items-center justify-center p-6 ${lang === 'en' ? '' : 'font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="fixed inset-0 overflow-hidden -z-10 pointer-events-none">
+          <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-rose-900/40 rounded-full blur-[120px] animate-pulse" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-maroon-900/30 rounded-full blur-[100px]" />
+        </div>
+
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="max-w-md w-full glass p-10 rounded-[3rem] text-center space-y-8 shadow-2xl relative z-10"
+        >
+          <div className="space-y-4">
+            <div className="w-20 h-20 bg-rose-600 rounded-3xl mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3">
+              <Smartphone className="w-10 h-10 text-white" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
+                {t.title}
+              </h1>
+              <p className="text-maroon-400 font-medium">{t.loginDesc}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleLogin('google')}
+              className="w-full glass-dark py-4 rounded-2xl flex items-center justify-center gap-4 hover:bg-white/10 transition-all group overflow-hidden relative"
+            >
+              <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
+              <span className="font-bold text-lg">{t.googleLogin}</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            </motion.button>
+
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleLogin('guest')}
+              className="w-full glass-dark py-4 rounded-2xl flex items-center justify-center gap-4 hover:bg-white/5 transition-all text-maroon-400 group"
+            >
+              <UserCheck className="w-5 h-5 group-hover:text-rose-400 transition-colors" />
+              <span className="font-bold text-lg group-hover:text-rose-400 transition-colors">{t.guestLogin}</span>
+            </motion.button>
+          </div>
+
+          <div className="flex items-center justify-center gap-4 pt-4">
+            <button 
+              onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
+              className="text-xs font-bold text-rose-500/60 hover:text-rose-500 transition-colors uppercase tracking-widest"
+            >
+              {lang === 'ar' ? 'English Version' : 'النسخة العربية'}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans p-4 md:p-8 relative selection:bg-rose-500/30 ${lang === 'en' ? 'font-sans' : ''}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Dynamic background blobs */}
@@ -490,6 +642,39 @@ export default function App() {
             >
               {lang === 'ar' ? 'English' : 'عربي'}
             </button>
+
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => {
+                  setHasUnread(false);
+                  setIsNotificationsOpen(true);
+                }}
+                className="relative glass-dark p-2.5 rounded-xl text-rose-400 hover:bg-white/10 transition-all"
+              >
+                <Bell size={20} />
+                {hasUnread && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-maroon-950 animate-bounce" />
+                )}
+              </button>
+
+              <div className="flex items-center gap-3 glass-dark p-1.5 px-3 rounded-2xl border border-white/5">
+                {currentUser?.avatar && (
+                  <img src={currentUser.avatar} className="w-7 h-7 rounded-lg shadow-lg" alt="Avatar" />
+                )}
+                <div className="hidden md:block">
+                  <div className="text-[10px] font-bold text-maroon-400 leading-tight uppercase tracking-tighter">
+                    {currentUser?.type === 'google' ? 'Admin' : 'Guest'}
+                  </div>
+                  <div className="text-xs font-bold leading-tight">{currentUser?.name}</div>
+                </div>
+                <button 
+                  onClick={() => setIsLoggedIn(false)}
+                  className="p-1.5 hover:text-rose-400 transition-colors"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            </div>
           </motion.div>
 
           <div className="relative w-full md:w-96 group">
@@ -498,7 +683,7 @@ export default function App() {
               animate={{ x: 0, opacity: 1 }}
               className={`glass-dark px-6 py-3 rounded-2xl flex items-center gap-3 transition-all duration-300 ${isSearchFocused ? 'ring-2 ring-rose-500/50 bg-maroon-900/60' : ''}`}
             >
-              <Search className={`w-5 h-5 transition-colors ${isSearchFocused ? 'text-rose-400' : 'text-maroon-400'}`} />
+              <Search className={`w-4 h-4 transition-colors ${isSearchFocused ? 'text-rose-400' : 'text-maroon-400'}`} />
               <input 
                 type="text" 
                 value={searchQuery}
@@ -510,7 +695,7 @@ export default function App() {
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery("")} className="hover:text-rose-400 transition-colors">
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </motion.div>
@@ -536,7 +721,7 @@ export default function App() {
                         >
                           <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-lg ${product.quantity < 3 ? 'bg-amber-500/20 text-amber-500' : 'bg-rose-500/20 text-rose-400'}`}>
-                              {product.category === 'screens' ? <Smartphone size={18} /> : <Zap size={18} />}
+                              {product.category === 'screens' ? <Smartphone size={16} /> : <Zap size={16} />}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -560,7 +745,7 @@ export default function App() {
                               onClick={() => startEditProduct(product)}
                               className="p-2 text-maroon-700 hover:text-emerald-500 transition-colors"
                             >
-                              <Settings size={16} />
+                              <Settings size={14} />
                             </button>
                             <motion.button
                               whileHover={{ scale: 1.05 }}
@@ -573,10 +758,10 @@ export default function App() {
                                 : 'bg-maroon-900/40 text-maroon-600 cursor-not-allowed'
                               }`}
                             >
-                              <History size={14} />
+                              <History size={12} />
                               {t.withdrawPiece}
                             </motion.button>
-                            <ArrowUpRight className="w-4 h-4 text-maroon-600 group-hover:text-rose-400 transition-colors" />
+                            <ArrowUpRight className="w-3.5 h-3.5 text-maroon-600 group-hover:text-rose-400 transition-colors" />
                           </div>
                         </div>
                       ))}
@@ -584,7 +769,7 @@ export default function App() {
                   ) : (
                     <div className="p-10 text-center text-maroon-500">
                       <div className="mb-2 flex justify-center">
-                        <Search className="w-8 h-8 opacity-20" />
+                        <Search className="w-6 h-6 opacity-20" />
                       </div>
                       <p>لا توجد نتائج مطابقة لـ "{searchQuery}"</p>
                     </div>
@@ -615,7 +800,7 @@ export default function App() {
                 onClick={stat.action}
                 className="glass rounded-2xl p-4 flex flex-col items-center justify-center text-center group hover:bg-white/15 transition-all cursor-pointer shadow-xl shadow-black/20"
               >
-                <stat.icon className="w-5 h-5 mb-2 text-rose-400 group-hover:scale-110 transition-transform" />
+                <stat.icon className="w-4 h-4 mb-2 text-rose-400 group-hover:scale-110 transition-transform" />
                 <div className="text-[10px] text-maroon-400 mb-1 uppercase font-bold">{stat.label}</div>
                 <div className="text-xl font-bold">{stat.value}</div>
               </motion.div>
@@ -655,7 +840,7 @@ export default function App() {
                     >
                       <div className="glass rounded-[1.8rem] p-5 h-full flex flex-col items-center justify-center relative z-10 text-center transition-all bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20">
                         <div className={`p-3 rounded-xl bg-gradient-to-br ${cat.color} shadow-lg shadow-maroon-900/40 mb-3 group-hover:rotate-6 transition-transform`}>
-                          <cat.icon className="w-6 h-6 text-white" />
+                          <cat.icon className="w-5 h-5 text-white" />
                         </div>
                         <h3 className="text-sm md:text-base font-bold mb-1 group-hover:text-rose-300 transition-colors line-clamp-1">{t[cat.nameKey as keyof typeof t]}</h3>
                         <div className="flex items-center gap-1.5 text-[10px] text-maroon-400 font-bold uppercase">
@@ -686,7 +871,7 @@ export default function App() {
                   }}
                   className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-white/5 transition-colors group"
                 >
-                  {lang === 'ar' ? <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> : <ChevronLeft className="w-5 h-5 rotate-180 group-hover:translate-x-1 transition-transform" />}
+                  {lang === 'ar' ? <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> : <ChevronLeft className="w-4 h-4 rotate-180 group-hover:translate-x-1 transition-transform" />}
                   <span>{selectedFolder ? t.backToFolders : t.backToCategories}</span>
                 </button>
                 <div className={`${lang === 'ar' ? 'text-right' : 'text-left'}`}>
@@ -719,7 +904,7 @@ export default function App() {
                         className="glass rounded-3xl p-6 flex flex-col items-center justify-center cursor-pointer group hover:bg-rose-900/20 transition-all border-rose-900/0 hover:border-rose-500/30"
                       >
                         <div className="p-4 bg-maroon-900/40 rounded-2xl mb-4 group-hover:bg-rose-600 group-hover:text-white transition-all text-rose-500">
-                          <Folder className="w-8 h-8" />
+                          <Folder className="w-6 h-6" />
                         </div>
                         <span className="font-bold text-lg">{company.nameKey ? t[company.nameKey as keyof typeof t] : company.name}</span>
                         <span className="text-xs text-maroon-500 mt-1">{prodCount} {t.piece}</span>
@@ -734,7 +919,7 @@ export default function App() {
                     className="glass border-dashed border-maroon-800 rounded-3xl p-6 flex flex-col items-center justify-center cursor-pointer group hover:border-rose-500/50 transition-all"
                   >
                     <div className="p-4 bg-white/5 rounded-2xl mb-4 group-hover:bg-rose-600/20 transition-all text-maroon-700 group-hover:text-rose-400">
-                      <FolderPlus className="w-8 h-8" />
+                      <FolderPlus className="w-6 h-6" />
                     </div>
                     <span className="font-medium text-sm text-maroon-500">{t.addFolder}</span>
                   </motion.div>
@@ -749,7 +934,7 @@ export default function App() {
                   onClick={() => setIsAddMenuOpen(true)}
                   className="w-16 h-16 rounded-full bg-rose-600 shadow-xl shadow-rose-950/50 flex items-center justify-center group relative overflow-hidden"
                 >
-                  <Plus className="w-8 h-8 text-white group-hover:rotate-90 transition-transform duration-300" />
+                  <Plus className="w-6 h-6 text-white group-hover:rotate-90 transition-transform duration-300" />
                   <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </motion.button>
               </div>
@@ -776,7 +961,7 @@ export default function App() {
                         className="glass px-6 py-4 rounded-2xl flex items-center gap-4 hover:bg-white/20 transition-all text-maroon-100 group"
                       >
                         <div className="p-2 bg-emerald-500/20 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                          <FilePlus className="w-6 h-6" />
+                          <FilePlus className="w-5 h-5" />
                         </div>
                         <span className="font-bold text-lg">{t.addProduct}</span>
                       </button>
@@ -785,7 +970,7 @@ export default function App() {
                         className="glass px-6 py-4 rounded-2xl flex items-center gap-4 hover:bg-white/20 transition-all text-maroon-100 group"
                       >
                         <div className="p-2 bg-amber-500/20 rounded-lg group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                          <FolderPlus className="w-6 h-6" />
+                          <FolderPlus className="w-5 h-5" />
                         </div>
                         <span className="font-bold text-lg">{t.addFolder}</span>
                       </button>
@@ -794,7 +979,7 @@ export default function App() {
                         className="glass px-6 py-4 rounded-2xl flex items-center gap-4 hover:bg-white/20 transition-all text-maroon-100 group"
                       >
                         <div className="p-2 bg-rose-500/20 rounded-lg group-hover:bg-rose-500 group-hover:text-white transition-colors">
-                          <UserCheck className="w-6 h-6" />
+                          <UserCheck className="w-5 h-5" />
                         </div>
                         <span className="font-bold text-lg">{t.addCustomer}</span>
                       </button>
@@ -825,17 +1010,17 @@ export default function App() {
                           <div className="flex items-center gap-3">
                             {activeForm?.includes("product") && (
                               <div className="p-3 bg-emerald-500/20 rounded-2xl text-emerald-400">
-                                <FilePlus className="w-6 h-6" />
+                                <FilePlus className="w-5 h-5" />
                               </div>
                             )}
                             {activeForm === "folder" && (
                               <div className="p-3 bg-amber-500/20 rounded-2xl text-amber-400">
-                                <FolderPlus className="w-6 h-6" />
+                                <FolderPlus className="w-5 h-5" />
                               </div>
                             )}
                             {activeForm?.includes("customer") && (
                               <div className="p-3 bg-rose-500/20 rounded-2xl text-rose-400">
-                                <UserCheck className="w-6 h-6" />
+                                <UserCheck className="w-5 h-5" />
                               </div>
                             )}
                             <div>
@@ -852,7 +1037,7 @@ export default function App() {
                             onClick={closeModals}
                             className="p-2 hover:bg-white/10 rounded-full transition-colors"
                           >
-                            <X className="w-6 h-6 text-maroon-400" />
+                            <X className="w-5 h-5 text-maroon-400" />
                           </button>
                         </div>
 
@@ -1008,7 +1193,7 @@ export default function App() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-4">
                           <div className="p-3 bg-rose-600 rounded-2xl">
-                             <Package className="w-6 h-6 text-white" />
+                             <Package className="w-5 h-5 text-white" />
                           </div>
                           <div>
                             <h3 className="text-2xl font-bold">{t.inventory}</h3>
@@ -1022,7 +1207,7 @@ export default function App() {
                             <div key={product.id} className="glass-dark p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:bg-white/5 transition-all">
                               <div className="flex items-center gap-4">
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${product.quantity < 3 ? 'bg-amber-500/20 text-amber-500' : 'bg-maroon-900/40 text-rose-400'}`}>
-                                  {product.category === 'screens' ? <Smartphone size={20} /> : <Zap size={20} />}
+                                  {product.category === 'screens' ? <Smartphone size={18} /> : <Zap size={18} />}
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -1062,7 +1247,7 @@ export default function App() {
                                     onClick={() => startEditProduct(product)}
                                     className="p-2 text-maroon-700 hover:text-emerald-500 transition-colors"
                                   >
-                                    <Settings size={18} />
+                                    <Settings size={16} />
                                   </button>
                                   <motion.button
                                     whileHover={{ scale: 1.05 }}
@@ -1075,14 +1260,14 @@ export default function App() {
                                       : 'bg-maroon-900/40 text-maroon-600 cursor-not-allowed'
                                     }`}
                                   >
-                                    <History size={16} />
+                                    <History size={14} />
                                     {t.withdrawPiece}
                                   </motion.button>
                                   <button 
                                     onClick={() => deleteProduct(product.id)}
                                     className="p-2 text-maroon-700 hover:text-rose-500 transition-colors"
                                   >
-                                    <X size={18} />
+                                    <X size={16} />
                                   </button>
                                 </div>
                               </div>
@@ -1091,7 +1276,7 @@ export default function App() {
                         ) : (
                           <div className="py-20 text-center">
                             <div className="inline-flex p-6 bg-white/5 rounded-full mb-4">
-                              <Package className="w-12 h-12 text-maroon-700" />
+                              <Package className="w-10 h-10 text-maroon-700" />
                             </div>
                             <h4 className="text-xl font-bold text-maroon-300">{t.emptyInventory}</h4>
                             <p className="text-maroon-500 max-w-xs mx-auto mt-2">{t.emptyInventoryDesc}</p>
@@ -1104,7 +1289,7 @@ export default function App() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                         <div className="flex items-center gap-4">
                           <div className="p-3 bg-rose-600 rounded-2xl shadow-lg shadow-rose-900/20">
-                             <UserCheck className="w-6 h-6 text-white" />
+                             <UserCheck className="w-5 h-5 text-white" />
                           </div>
                           <div>
                             <h3 className="text-2xl font-bold">{t.maintenance}</h3>
@@ -1113,7 +1298,7 @@ export default function App() {
                         </div>
                         <div className="flex-1 max-w-sm">
                           <div className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10">
-                            <Search size={16} className="text-maroon-500" />
+                            <Search size={14} className="text-maroon-500" />
                             <input 
                               type="text"
                               value={maintenanceSearchQuery}
@@ -1187,7 +1372,7 @@ export default function App() {
                                     className="p-2 bg-white/5 hover:bg-rose-500/20 text-maroon-500 hover:text-rose-500 rounded-lg transition-all"
                                     title="Delete Card"
                                   >
-                                    <X size={16} />
+                                    <X size={14} />
                                   </button>
                                   <div 
                                     onClick={() => toggleReady(rec.id)}
@@ -1206,12 +1391,12 @@ export default function App() {
                               </div>
                               <div className="flex flex-wrap items-center gap-3 mt-4 text-[10px] text-maroon-400 font-medium">
                                 <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-md">
-                                  <Clock size={12} />
+                                  <Clock size={10} />
                                   <span>{t.entryDate}: {rec.entryDate}</span>
                                 </div>
                                 {rec.readyDate && (
                                   <div className="flex items-center gap-1 bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md border border-emerald-500/20">
-                                    <CheckCircle2 size={12} />
+                                    <CheckCircle2 size={10} />
                                     <span>{t.readyDate}: {rec.readyDate}</span>
                                   </div>
                                 )}
@@ -1221,12 +1406,12 @@ export default function App() {
                                 <div className="flex items-center gap-2">
                                   {rec.isReady ? (
                                     <div className="flex items-center gap-1.5 text-emerald-400 text-sm font-bold bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20">
-                                      <CheckCircle2 size={16} />
+                                      <CheckCircle2 size={14} />
                                       <span>{t.readyToDeliver}</span>
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-1.5 text-rose-400 text-sm font-bold bg-rose-400/10 px-3 py-1.5 rounded-full border border-rose-400/20">
-                                      <Clock size={16} />
+                                      <Clock size={14} />
                                       <span>{t.underMaintenance}</span>
                                     </div>
                                   )}
@@ -1244,7 +1429,7 @@ export default function App() {
                         ) : (
                           <div className="col-span-full py-20 text-center">
                             <div className="inline-flex p-6 bg-white/5 rounded-full mb-4">
-                              <UserCheck className="w-12 h-12 text-maroon-700" />
+                              <UserCheck className="w-10 h-10 text-maroon-700" />
                             </div>
                             <h4 className="text-xl font-bold text-maroon-300">{t.noRecords}</h4>
                             <p className="text-maroon-500 max-w-xs mx-auto mt-2">{t.noRecordsDesc}</p>
@@ -1259,7 +1444,7 @@ export default function App() {
                           <div className={`p-3 rounded-2xl bg-gradient-to-br ${CATEGORIES.find(c => c.id === selectedCategory)?.color || 'from-rose-600 to-maroon-600'}`}>
                              {(() => {
                                const Icon = CATEGORIES.find(c => c.id === selectedCategory)?.icon || Package;
-                               return <Icon className="w-6 h-6 text-white" />;
+                               return <Icon className="w-5 h-5 text-white" />;
                              })()}
                           </div>
                           <div>
@@ -1300,7 +1485,7 @@ export default function App() {
                               <div key={product.id} className="glass-dark p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:bg-white/5 transition-all">
                                 <div className="flex items-center gap-4">
                                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${product.quantity < 3 ? 'bg-amber-500/20 text-amber-500' : 'bg-maroon-900/40 text-rose-400'}`}>
-                                    {product.category === 'screens' ? <Smartphone size={20} /> : <Zap size={20} />}
+                                    {product.category === 'screens' ? <Smartphone size={18} /> : <Zap size={18} />}
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2">
@@ -1340,7 +1525,7 @@ export default function App() {
                                       onClick={() => startEditProduct(product)}
                                       className="p-2 text-maroon-700 hover:text-emerald-500 transition-colors"
                                     >
-                                      <Settings size={18} />
+                                      <Settings size={16} />
                                     </button>
                                     <motion.button
                                       whileHover={{ scale: 1.05 }}
@@ -1353,14 +1538,14 @@ export default function App() {
                                         : 'bg-maroon-900/40 text-maroon-600 cursor-not-allowed'
                                       }`}
                                     >
-                                      <History size={16} />
+                                      <History size={14} />
                                       {t.withdrawPiece}
                                     </motion.button>
                                     <button 
                                       onClick={() => deleteProduct(product.id)}
                                       className="p-2 text-maroon-700 hover:text-rose-500 transition-colors"
                                     >
-                                      <X size={18} />
+                                      <X size={16} />
                                     </button>
                                   </div>
                                 </div>
@@ -1371,7 +1556,7 @@ export default function App() {
                               <div className="inline-flex p-6 bg-white/5 rounded-full mb-4">
                                  {(() => {
                                    const Icon = CATEGORIES.find(c => c.id === selectedCategory)?.icon || Package;
-                                   return <Icon className="w-12 h-12 text-maroon-700" />;
+                                   return <Icon className="w-10 h-10 text-maroon-700" />;
                                  })()}
                               </div>
                               <h4 className="text-xl font-bold text-maroon-300">{t.emptyInventory}</h4>
@@ -1390,6 +1575,78 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Notifications Sidebar */}
+      <AnimatePresence>
+        {isNotificationsOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsNotificationsOpen(false)}
+              className="fixed inset-0 bg-maroon-950/60 backdrop-blur-md z-[150]"
+            />
+            <motion.div 
+              initial={{ x: lang === 'ar' ? -400 : 400 }}
+              animate={{ x: 0 }}
+              exit={{ x: lang === 'ar' ? -400 : 400 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className={`fixed top-0 bottom-0 ${lang === 'ar' ? 'left-0' : 'right-0'} w-full md:w-96 glass shadow-2xl z-[160] overflow-hidden flex flex-col border-white/10`}
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-rose-600 rounded-lg">
+                    <Bell className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold">{t.activityLog}</h3>
+                </div>
+                <button 
+                  onClick={() => setIsNotificationsOpen(false)}
+                  className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+                {activities.length > 0 ? (
+                  activities.map((activity: any) => (
+                    <motion.div 
+                      key={activity.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="glass-dark p-4 rounded-xl relative overflow-hidden group hover:bg-white/10 transition-colors"
+                    >
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                        activity.type === 'add' ? 'bg-emerald-500' : 
+                        activity.type === 'withdraw' ? 'bg-rose-500' : 'bg-amber-500'
+                      }`} />
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[9px] uppercase font-bold text-maroon-500 tracking-wider">
+                          {activity.time} • {activity.date}
+                        </span>
+                      </div>
+                      <h4 className={`font-bold text-sm mb-1 ${
+                        activity.type === 'alert' ? 'text-amber-400 flex items-center gap-2' : ''
+                      }`}>
+                        {activity.type === 'alert' && <AlertCircle size={12} />}
+                        {activity.title}
+                      </h4>
+                      <p className="text-[11px] text-maroon-300 leading-relaxed">{activity.desc}</p>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center opacity-30 select-none">
+                    <Bell className="w-12 h-12 mb-4" />
+                    <p className="font-bold">{t.noNotifications}</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Footer / Status Bar */}
       <footer className="mt-20 border-t border-maroon-900/30 pt-8 pb-4 text-center">
