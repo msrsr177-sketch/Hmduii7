@@ -39,7 +39,9 @@ import {
   LogOut,
   ChevronDown,
   Printer,
-  Bluetooth
+  Bluetooth,
+  UserPlus,
+  Repeat
 } from "lucide-react";
 import { useState, useMemo, FormEvent, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -110,7 +112,7 @@ const translations = {
     batteries: "البطاريات",
     chargingFlex: "فلات شحن",
     disassembled: "أجهزة تفصيخ",
-    speakers: "سماعات",
+    speakers: "سبيكر",
     cameras: "كاميرات",
     sim: "شرايح",
     powerFinger: "بصمة + زر باور",
@@ -146,6 +148,20 @@ const translations = {
     searchingBluetooth: "جاري البحث عن طابعة بلوتوث...",
     connecting: "جاري الاتصال...",
     printSuccess: "تم إرسال البيانات للطابعة بنجاح",
+    prices: "الأسعار",
+    addPrice: "إضافة سعر جديد",
+    priceType: "نوع القطعة",
+    priceValue: "السعر بالدينار",
+    iqd: "د.ع",
+    compatibility: "التوافق",
+    addCompatibility: "إضافة توافق جديد",
+    deviceName: "اسم الجهاز",
+    compatibleDevices: "الأجهزة المتوافقة (افصل بينها بسطر جديد)",
+    compatibilityList: "قائمة التوافق",
+    brandType: "الماركة / النوع",
+    compatibilityResults: "نتائج التوافق",
+    miscellaneous: "المنوعات",
+    trackCount: "عدد المسارات",
   },
   en: {
     title: "New Phone Maintenance",
@@ -246,11 +262,33 @@ const translations = {
     searchingBluetooth: "Searching for Bluetooth printer...",
     connecting: "Connecting...",
     printSuccess: "Data sent to printer successfully",
+    prices: "Prices",
+    addPrice: "Add New Price",
+    priceType: "Part Type",
+    priceValue: "Price in IQD",
+    iqd: "IQD",
+    compatibility: "Compatibility",
+    addCompatibility: "Add Compatibility",
+    deviceName: "Device Name",
+    compatibleDevices: "Compatible Devices (New line for each)",
+    compatibilityList: "Compatibility List",
+    brandType: "Brand / Type",
+    compatibilityResults: "Compatibility Results",
+    miscellaneous: "Miscellaneous",
+    trackCount: "Number of Tracks",
   }
 };
 
+const MOBILE_BRANDS = [
+  "Apple", "Samsung", "Huawei", "Honor", "Xiaomi", "Realme", 
+  "Oppo", "Vivo", "Infinix", "Tecno", "Itel", "Nokia", 
+  "Sony", "Google", "OnePlus"
+];
+
 // Category Icons and Config
 const CATEGORIES = [
+  { id: "prices", nameKey: "prices", icon: CreditCard, count: 0, color: "from-amber-400 to-rose-600" },
+  { id: "compatibility", nameKey: "compatibility", icon: Repeat, count: 0, color: "from-blue-500 to-indigo-600" },
   { id: "screens", nameKey: "screens", icon: Smartphone, count: 0, color: "from-rose-500 to-maroon-600" },
   { id: "batteries", nameKey: "batteries", icon: Battery, count: 0, color: "from-emerald-500 to-maroon-600" },
   { id: "charging-flex", nameKey: "chargingFlex", icon: Zap, count: 0, color: "from-amber-500 to-maroon-600" },
@@ -264,6 +302,7 @@ const CATEGORIES = [
   { id: "motherboard", nameKey: "motherboard", icon: CircuitBoard, count: 0, color: "from-gray-400 to-maroon-600" },
   { id: "connectors", nameKey: "connectors", icon: Cable, count: 0, color: "from-indigo-500 to-maroon-600" },
   { id: "charging-base", nameKey: "chargingBase", icon: Plug2, count: 0, color: "from-teal-500 to-maroon-600" },
+  { id: "miscellaneous", nameKey: "miscellaneous", icon: Folders, count: 0, color: "from-slate-500 to-maroon-600" },
 ];
 
 const COMPANIES = [
@@ -313,7 +352,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
-  const [activeForm, setActiveForm] = useState<"product" | "folder" | "customer" | "edit_product" | "edit_customer" | null>(null);
+  const [activeForm, setActiveForm] = useState<"product" | "folder" | "customer" | "edit_product" | "edit_customer" | "price" | "compatibility" | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
@@ -331,6 +370,13 @@ export default function App() {
   const [prodLoc, setProdLoc] = useState("");
   const [prodBrand, setProdBrand] = useState("");
   const [prodCategory, setProdCategory] = useState("");
+
+  const [pricePartName, setPricePartName] = useState("");
+  const [pricePartCategory, setPricePartCategory] = useState("");
+  const [priceAmount, setPriceAmount] = useState("");
+
+  const [compDeviceName, setCompDeviceName] = useState("");
+  const [compDevicesList, setCompDevicesList] = useState("");
 
   const [folderName, setFolderName] = useState("");
 
@@ -350,6 +396,47 @@ export default function App() {
   const [secretCode, setSecretCode] = useState("");
   const [codeError, setCodeError] = useState(false);
 
+  const [priceRecords, setPriceRecords] = useState<any[]>(() => {
+    const saved = localStorage.getItem('priceRecords');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [compatibilityRecords, setCompatibilityRecords] = useState<any[]>(() => {
+    const saved = localStorage.getItem('compatibilityRecords');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Navigation handling for mobile back button
+  useEffect(() => {
+    const onPopState = () => {
+      if (activeForm) {
+        setActiveForm(null);
+      } else if (isAddMenuOpen) {
+        setIsAddMenuOpen(false);
+      } else if (isNotificationsOpen) {
+        setIsNotificationsOpen(false);
+      } else if (isPrinting) {
+        setIsPrinting(false);
+      } else if (selectedFolder) {
+        setSelectedFolder(null);
+      } else if (selectedCategory) {
+        setSelectedCategory(null);
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [activeForm, isAddMenuOpen, isNotificationsOpen, isPrinting, selectedFolder, selectedCategory]);
+
+  useEffect(() => {
+    // If we are "in" a state, push state to handle the back button popping correctly
+    if (selectedCategory || selectedFolder || activeForm || isAddMenuOpen || isNotificationsOpen) {
+       if (!window.history.state || window.history.state.appLevel !== 1) {
+         window.history.pushState({ appLevel: 1 }, "");
+       }
+    }
+  }, [selectedCategory, selectedFolder, activeForm, isAddMenuOpen, isNotificationsOpen]);
+
   const filteredInventory = useMemo(() => {
     return products.filter(p => 
       p.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
@@ -357,6 +444,24 @@ export default function App() {
       p.loc?.toLowerCase().includes(inventorySearch.toLowerCase())
     );
   }, [inventorySearch, products]);
+
+  const filteredCompatibility = useMemo(() => {
+    if (!searchQuery && !inventorySearch) return compatibilityRecords;
+    const term = (searchQuery || inventorySearch).toLowerCase();
+    return compatibilityRecords.filter(r => 
+      r.deviceName.toLowerCase().includes(term) ||
+      r.compatibleItems.some((item: string) => item.toLowerCase().includes(term))
+    );
+  }, [compatibilityRecords, inventorySearch, searchQuery]);
+
+  const filteredPriceRecords = useMemo(() => {
+    const term = inventorySearch.toLowerCase();
+    return priceRecords.filter(p => {
+      const category = CATEGORIES.find(c => c.id === p.category);
+      const categoryLabel = category ? (t[category.nameKey as keyof typeof t] || "").toLowerCase() : p.category.toLowerCase();
+      return p.name.toLowerCase().includes(term) || categoryLabel.includes(term);
+    });
+  }, [inventorySearch, priceRecords, lang]);
 
   // Web Bluetooth Printing Logic (Skeleton)
   const handlePrintRecord = async (record: any) => {
@@ -486,6 +591,14 @@ export default function App() {
     localStorage.setItem('hasUnread', hasUnread.toString());
   }, [hasUnread]);
 
+  useEffect(() => {
+    localStorage.setItem('priceRecords', JSON.stringify(priceRecords));
+  }, [priceRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('compatibilityRecords', JSON.stringify(compatibilityRecords));
+  }, [compatibilityRecords]);
+
   const addActivity = (title: string, desc: string, type: 'add' | 'withdraw' | 'alert') => {
     const newActivity = {
       id: Date.now(),
@@ -587,6 +700,62 @@ export default function App() {
     setProdBrand(selectedFolder || "");
     setProdCategory(selectedCategory && selectedCategory !== "maintenance" && selectedCategory !== "all_inventory" ? selectedCategory : "");
     setFolderName("");
+    setPricePartName("");
+    setPricePartCategory("");
+    setPriceAmount("");
+    setCompDeviceName("");
+    setCompDevicesList("");
+  };
+
+  const handleAddCompatibility = (e: FormEvent) => {
+    e.preventDefault();
+    if (!compDeviceName.trim() || !compDevicesList.trim()) return;
+
+    const newRecord = {
+      id: Date.now(),
+      deviceName: compDeviceName,
+      compatibleItems: compDevicesList.split('\n').filter(i => i.trim() !== ""),
+    };
+
+    setCompatibilityRecords(prev => [newRecord, ...prev]);
+    addActivity(
+      lang === 'ar' ? 'إضافة توافق' : 'Add Compatibility',
+      `${compDeviceName}`,
+      'add'
+    );
+    closeModals();
+  };
+
+  const deleteCompatibility = (id: number) => {
+    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
+      setCompatibilityRecords(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleAddPrice = (e: FormEvent) => {
+    e.preventDefault();
+    if (!priceAmount.trim() || !pricePartName.trim()) return;
+
+    const newRecord = {
+      id: Date.now(),
+      name: pricePartName,
+      category: pricePartCategory || "screens",
+      price: priceAmount,
+    };
+
+    setPriceRecords(prev => [newRecord, ...prev]);
+    addActivity(
+      lang === 'ar' ? 'إضافة سعر' : 'Add Price',
+      `${pricePartName} - ${priceAmount} ${t.iqd}`,
+      'add'
+    );
+    closeModals();
+  };
+
+  const deletePrice = (id: number) => {
+    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السعر؟' : 'Are you sure you want to delete this price?')) {
+      setPriceRecords(prev => prev.filter(p => p.id !== id));
+    }
   };
 
   const startEditProduct = (product: any) => {
@@ -1006,6 +1175,60 @@ export default function App() {
         {/* Main Dashboard View */}
         {!selectedCategory && (
           <div className="space-y-3 mb-6">
+            {/* Quick Compatibility Results when searching */}
+            {searchQuery && filteredCompatibility.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 space-y-3"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-3 w-1 bg-blue-500 rounded-full" />
+                  <h2 className="text-[10px] font-bold text-blue-100 uppercase tracking-widest">{t.compatibilityResults}</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {filteredCompatibility.slice(0, 4).map(comp => (
+                    <div 
+                      key={comp.id} 
+                      className="glass-dark p-3 rounded-xl border border-blue-500/10 flex flex-col gap-2 cursor-pointer hover:bg-white/5 transition-all"
+                      onClick={() => {
+                        setSelectedCategory('compatibility');
+                        setInventorySearch(comp.deviceName);
+                        setSearchQuery("");
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Smartphone size={14} className="text-blue-400" />
+                        <span className="text-xs font-bold text-white">{comp.deviceName}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {comp.compatibleItems.slice(0, 3).map((item: string, i: number) => (
+                          <span key={i} className="text-[9px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-md border border-blue-500/20">
+                            {item}
+                          </span>
+                        ))}
+                        {comp.compatibleItems.length > 3 && (
+                          <span className="text-[9px] text-maroon-600">+{comp.compatibleItems.length - 3}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {filteredCompatibility.length > 0 && (
+                    <button 
+                      onClick={() => {
+                        setSelectedCategory('compatibility');
+                        setSearchQuery("");
+                      }}
+                      className="col-span-full text-[10px] text-blue-400 font-bold hover:underline py-1 text-center"
+                    >
+                      {lang === 'ar' ? 'عرض جميع نتائج التوافق' : 'Show all compatibility results'}
+                    </button>
+                  )}
+                </div>
+                <div className="h-px bg-white/5 w-full my-4" />
+              </motion.div>
+            )}
+
             {/* Long Vertical Rectangle - Maintenance Status */}
             <motion.div
               variants={itemVariants}
@@ -1075,14 +1298,24 @@ export default function App() {
                 className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2"
               >
                 {CATEGORIES.filter(c => c.id !== 'all_inventory' && c.id !== 'maintenance').map((cat) => {
-                  const catCount = products.filter(p => p.category === cat.id).reduce((acc, p) => acc + p.quantity, 0);
+                  const catCount = cat.id === 'prices' ? priceRecords.length : 
+                                   cat.id === 'compatibility' ? compatibilityRecords.length :
+                                   products.filter(p => p.category === cat.id).reduce((acc, p) => acc + p.quantity, 0);
+                  
+                  const countLabel = cat.id === 'prices' ? (lang === 'ar' ? 'سعر' : 'price') : 
+                                     cat.id === 'compatibility' ? (lang === 'ar' ? 'سجل' : 'record') :
+                                     t.piece;
                   return (
                     <motion.div
                       key={cat.id}
                       variants={itemVariants}
                       whileHover={{ scale: 1.05, y: -2 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => setSelectedCategory(cat.id)}
+                      onClick={() => {
+                        setSelectedCategory(cat.id);
+                        setSelectedFolder(null);
+                        setInventorySearch("");
+                      }}
                       className="group cursor-pointer relative overflow-hidden"
                     >
                       <div className="glass rounded-xl p-2 h-full flex flex-col items-center justify-center relative z-10 text-center transition-all bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20">
@@ -1092,7 +1325,7 @@ export default function App() {
                         <h3 className="text-[10px] font-bold mb-0.5 group-hover:text-rose-300 transition-colors line-clamp-1">{t[cat.nameKey as keyof typeof t]}</h3>
                         <div className="flex items-center gap-1 text-[8px] text-maroon-400 font-bold uppercase opacity-60">
                           <span className="text-rose-400">{catCount}</span>
-                          <span>{t.piece}</span>
+                          <span>{countLabel}</span>
                         </div>
                       </div>
                     </motion.div>
@@ -1138,7 +1371,7 @@ export default function App() {
               </div>
 
               {/* Sub-Folders View (Generalized for all categories) */}
-              {selectedCategory && selectedCategory !== "all_inventory" && selectedCategory !== "maintenance" && !selectedFolder && (
+              {selectedCategory && selectedCategory !== "all_inventory" && selectedCategory !== "maintenance" && selectedCategory !== "prices" && !selectedFolder && (
                 <motion.div 
                   variants={containerVariants}
                   initial="hidden"
@@ -1205,31 +1438,113 @@ export default function App() {
                       onClick={() => setIsAddMenuOpen(false)}
                       className="fixed inset-0 bg-maroon-950/60 backdrop-blur-sm z-[60]"
                     />
-                    <motion.div 
-                      initial={{ scale: 0.9, opacity: 0, x: -50, y: 50 }}
-                      animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
-                      exit={{ scale: 0.9, opacity: 0, x: -50, y: 50 }}
-                      className="fixed bottom-20 left-6 z-[70] flex flex-col gap-2"
-                    >
-                      <button 
-                        onClick={() => setActiveForm("product")}
-                        className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group"
+                      <motion.div 
+                        initial={{ scale: 0.9, opacity: 0, x: -50, y: 50 }}
+                        animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+                        exit={{ scale: 0.9, opacity: 0, x: -50, y: 50 }}
+                        className="fixed bottom-20 left-6 z-[70] flex flex-col gap-2"
                       >
-                        <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                          <FilePlus className="w-4 h-4" />
-                        </div>
-                        <span className="font-bold text-sm">{t.addProduct}</span>
-                      </button>
-                      <button 
-                        onClick={() => setActiveForm("folder")}
-                        className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group"
-                      >
-                        <div className="p-1.5 bg-amber-500/20 rounded-lg group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                          <FolderPlus className="w-4 h-4" />
-                        </div>
-                        <span className="font-bold text-sm">{t.addFolder}</span>
-                      </button>
-                    </motion.div>
+                        {selectedCategory === "prices" ? (
+                          <button 
+                            onClick={() => setActiveForm("price")}
+                            className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group shadow-xl ring-1 ring-rose-500/30"
+                          >
+                            <div className="p-1.5 bg-rose-500/20 rounded-lg group-hover:bg-rose-500 group-hover:text-white transition-colors">
+                              <CreditCard className="w-4 h-4" />
+                            </div>
+                            <span className="font-bold text-sm">{t.addPrice}</span>
+                          </button>
+                        ) : selectedCategory === "compatibility" ? (
+                          <button 
+                            onClick={() => setActiveForm("compatibility")}
+                            className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group shadow-xl ring-1 ring-blue-500/30"
+                          >
+                            <div className="p-1.5 bg-blue-500/20 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                              <Repeat className="w-4 h-4" />
+                            </div>
+                            <span className="font-bold text-sm">{t.addCompatibility}</span>
+                          </button>
+                        ) : selectedCategory === "maintenance" ? (
+                          <button 
+                            onClick={() => setActiveForm("customer")}
+                            className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group shadow-xl ring-1 ring-indigo-500/30"
+                          >
+                            <div className="p-1.5 bg-indigo-500/20 rounded-lg group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                              <UserPlus className="w-4 h-4" />
+                            </div>
+                            <span className="font-bold text-sm">{t.addCustomer}</span>
+                          </button>
+                        ) : selectedCategory && selectedCategory !== "all_inventory" ? (
+                          <>
+                            <button 
+                              onClick={() => setActiveForm("product")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group shadow-xl ring-1 ring-emerald-500/30"
+                            >
+                              <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                                <FilePlus className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addProduct}</span>
+                            </button>
+                            <button 
+                              onClick={() => setActiveForm("folder")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group shadow-xl ring-1 ring-amber-500/30"
+                            >
+                              <div className="p-1.5 bg-amber-500/20 rounded-lg group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                                <FolderPlus className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addFolder}</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => setActiveForm("compatibility")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/10 transition-all text-maroon-400 group opacity-70 hover:opacity-100"
+                            >
+                              <div className="p-1.5 bg-blue-500/10 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                                <Repeat className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addCompatibility}</span>
+                            </button>
+                            <button 
+                              onClick={() => setActiveForm("price")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/10 transition-all text-maroon-400 group opacity-70 hover:opacity-100"
+                            >
+                              <div className="p-1.5 bg-rose-500/10 rounded-lg group-hover:bg-rose-500 group-hover:text-white transition-colors">
+                                <CreditCard className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addPrice}</span>
+                            </button>
+                            <button 
+                              onClick={() => setActiveForm("product")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group"
+                            >
+                              <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                                <FilePlus className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addProduct}</span>
+                            </button>
+                            <button 
+                              onClick={() => setActiveForm("folder")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group transition-all"
+                            >
+                              <div className="p-1.5 bg-amber-500/20 rounded-lg group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                                <FolderPlus className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addFolder}</span>
+                            </button>
+                            <button 
+                              onClick={() => setActiveForm("customer")}
+                              className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group"
+                            >
+                              <div className="p-1.5 bg-indigo-500/20 rounded-lg group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                <UserPlus className="w-4 h-4" />
+                              </div>
+                              <span className="font-bold text-sm">{t.addCustomer}</span>
+                            </button>
+                          </>
+                        )}
+                      </motion.div>
                   </>
                 )}
               </AnimatePresence>
@@ -1254,6 +1569,16 @@ export default function App() {
                       <div className="p-5">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
+                            {activeForm === "price" && (
+                              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400">
+                                <CreditCard className="w-4 h-4" />
+                              </div>
+                            )}
+                            {activeForm === "compatibility" && (
+                              <div className="p-2 bg-blue-500/20 rounded-xl text-blue-400">
+                                <Repeat className="w-4 h-4" />
+                              </div>
+                            )}
                             {activeForm?.includes("product") && (
                               <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
                                 <FilePlus className="w-4 h-4" />
@@ -1271,7 +1596,9 @@ export default function App() {
                             )}
                             <div>
                                 <h3 className="text-lg font-bold">
-                                  {activeForm === "product" ? t.addProduct : 
+                                  {activeForm === "price" ? t.addPrice :
+                                   activeForm === "compatibility" ? t.addCompatibility :
+                                   activeForm === "product" ? t.addProduct : 
                                    activeForm === "edit_product" ? t.editData :
                                    activeForm === "folder" ? t.addFolder : 
                                    activeForm === "edit_customer" ? t.editData : t.addCustomer}
@@ -1290,6 +1617,8 @@ export default function App() {
                         <form 
                           className="space-y-4" 
                           onSubmit={
+                            activeForm === "price" ? handleAddPrice :
+                            activeForm === "compatibility" ? handleAddCompatibility :
                             activeForm === "customer" ? handleAddCustomer : 
                             activeForm === "edit_customer" ? handleEditCustomer :
                             activeForm === "product" ? handleAddProduct : 
@@ -1299,23 +1628,80 @@ export default function App() {
                         >
                           <div className="space-y-1.5">
                             <label className="text-xs font-medium text-maroon-300 ml-1">
-                              {activeForm?.includes("product") ? t.productName : 
+                              {activeForm === "compatibility" ? t.deviceName :
+                               activeForm === "price" ? t.productName :
+                               activeForm?.includes("product") ? t.productName : 
                                activeForm === "folder" ? t.folderName : t.customerName}
                             </label>
                             <input 
                               type="text" 
                               required
-                              value={activeForm?.includes("customer") ? custName : activeForm?.includes("product") ? prodName : folderName}
+                              value={
+                                activeForm === "compatibility" ? compDeviceName :
+                                activeForm === "price" ? pricePartName : 
+                                activeForm?.includes("customer") ? custName : 
+                                activeForm?.includes("product") ? prodName : folderName
+                              }
                               onChange={(e) => {
-                                if (activeForm?.includes("customer")) setCustName(e.target.value);
+                                if (activeForm === "compatibility") setCompDeviceName(e.target.value);
+                                else if (activeForm === "price") setPricePartName(e.target.value);
+                                else if (activeForm?.includes("customer")) setCustName(e.target.value);
                                 else if (activeForm?.includes("product")) setProdName(e.target.value);
                                 else setFolderName(e.target.value);
                               }}
-                              placeholder={activeForm?.includes("product") ? t.placeholderProduct : 
-                                         activeForm === "folder" ? t.placeholderFolder : t.placeholderCustomer}
+                              placeholder={
+                                activeForm === "compatibility" ? t.placeholderDevice :
+                                activeForm === "price" ? t.placeholderProduct :
+                                activeForm?.includes("product") ? t.placeholderProduct : 
+                                activeForm === "folder" ? t.placeholderFolder : t.placeholderCustomer
+                              }
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
                             />
                           </div>
+
+                          {activeForm === "compatibility" && (
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-maroon-300 ml-1">{t.compatibleDevices}</label>
+                              <textarea 
+                                required
+                                rows={4}
+                                value={compDevicesList}
+                                onChange={(e) => setCompDevicesList(e.target.value)}
+                                placeholder="iPhone 11\niPhone XR\n..."
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-blue-500/50 transition-all text-xs text-maroon-50 resize-none"
+                              />
+                            </div>
+                          )}
+
+                          {activeForm === "price" && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-maroon-300 ml-1">{t.priceType}</label>
+                                <select 
+                                  required
+                                  value={pricePartCategory}
+                                  onChange={(e) => setPricePartCategory(e.target.value)}
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50 appearance-none cursor-pointer"
+                                >
+                                  <option value="" disabled className="bg-maroon-950">...</option>
+                                  {CATEGORIES.filter(c => c.id !== "prices" && c.id !== "maintenance" && c.id !== "all_inventory").map(cat => (
+                                    <option key={cat.id} value={cat.id} className="bg-maroon-950">{t[cat.nameKey as keyof typeof t]}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-maroon-300 ml-1">{t.priceValue}</label>
+                                <input 
+                                  type="text" 
+                                  required
+                                  value={priceAmount}
+                                  onChange={(e) => setPriceAmount(e.target.value)}
+                                  placeholder="25,000"
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
+                                />
+                              </div>
+                            </div>
+                          )}
 
                           {activeForm?.includes("product") && (
                             <div className="space-y-1.5">
@@ -1351,22 +1737,34 @@ export default function App() {
                               </div>
                               <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-maroon-300 ml-1">
-                                  {activeForm?.includes("product") ? t.brand : t.cost}
+                                  {activeForm?.includes("product") ? (prodCategory === "connectors" ? t.trackCount : t.brandType) : t.cost}
                                 </label>
                                 {activeForm?.includes("product") ? (
-                                  <select 
-                                    required
-                                    value={prodBrand}
-                                    onChange={(e) => setProdBrand(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50 appearance-none cursor-pointer"
-                                  >
-                                    <option value="" disabled className="bg-maroon-950">...</option>
-                                    {folders.filter(f => f.categoryId === (prodCategory || "screens")).map((company, idx) => (
-                                      <option key={`${company.id}-${idx}`} value={company.name} className="bg-maroon-950">
-                                        {company.nameKey ? t[company.nameKey as keyof typeof t] : company.name}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  prodCategory === "connectors" ? (
+                                    <input 
+                                      type="text" 
+                                      required
+                                      value={prodBrand}
+                                      onChange={(e) => setProdBrand(e.target.value)}
+                                      placeholder={lang === 'ar' ? "مثال: 20مسار" : "Ex: 20 tracks"}
+                                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
+                                    />
+                                  ) : (
+                                    <select 
+                                      required
+                                      value={prodBrand}
+                                      onChange={(e) => setProdBrand(e.target.value)}
+                                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50 appearance-none cursor-pointer"
+                                    >
+                                      <option value="" disabled className="bg-maroon-950">...</option>
+                                      {MOBILE_BRANDS.map((brand) => (
+                                        <option key={brand} value={brand} className="bg-maroon-950">
+                                          {brand}
+                                        </option>
+                                      ))}
+                                      <option value="Other" className="bg-maroon-950">{lang === 'ar' ? 'أخرى' : 'Other'}</option>
+                                    </select>
+                                  )
                                 ) : (
                                   <input 
                                     type="text" 
@@ -1456,7 +1854,7 @@ export default function App() {
               </AnimatePresence>
 
               {/* Main Content Area (Items or Grid) */}
-              {(selectedCategory === "all_inventory" || selectedCategory === "maintenance" || selectedFolder) && (
+              {(selectedCategory === "all_inventory" || selectedCategory === "maintenance" || selectedCategory === "prices" || selectedCategory === "compatibility" || selectedFolder) && (
                 <div className="glass rounded-[2rem] p-4 min-h-[300px] border-dashed border-maroon-800/50">
                   {selectedCategory === "all_inventory" ? (
                     <div className="space-y-6">
@@ -1530,6 +1928,164 @@ export default function App() {
                                 ? (lang === 'ar' ? `لم نجد أي تطابق لـ "${inventorySearch}"` : `We couldn't find any match for "${inventorySearch}"`)
                                 : t.emptyInventoryDesc}
                             </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : selectedCategory === "prices" ? (
+                    <div className="space-y-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-rose-600 rounded-2xl shadow-lg shadow-rose-900/20">
+                             <CreditCard className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-bold">{t.prices}</h3>
+                            <p className="text-maroon-400 text-sm">{t.totalItems}: {filteredPriceRecords.length}</p>
+                          </div>
+                        </div>
+                        <div className="flex-1 max-w-sm">
+                          <div className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10">
+                            <Search size={14} className="text-maroon-500" />
+                            <input 
+                              type="text"
+                              value={inventorySearch}
+                              onChange={(e) => setInventorySearch(e.target.value)}
+                              placeholder={lang === 'ar' ? 'ابحث بالاسم أو القسم...' : 'Search by name or category...'}
+                              className="bg-transparent border-none outline-none text-xs w-full"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {filteredPriceRecords.map(price => (
+                          <motion.div 
+                            key={price.id}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="glass-dark p-3 rounded-xl border border-white/5 hover:bg-white/5 transition-all group flex flex-col justify-between"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="text-[10px] text-rose-400 font-bold uppercase mb-1">
+                                  {CATEGORIES.find(c => c.id === price.category) ? (
+                                    t[CATEGORIES.find(c => c.id === price.category)!.nameKey as keyof typeof t]
+                                  ) : price.category}
+                                </div>
+                                <h4 className="text-sm font-bold text-white mb-2">{price.name}</h4>
+                              </div>
+                              <button 
+                                onClick={() => deletePrice(price.id)}
+                                className="p-1.5 text-maroon-700 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+                              <span className="text-[10px] text-maroon-500 font-medium">{lang === 'ar' ? 'السعر المقدر' : 'Estimated Price'}</span>
+                              <div className="bg-rose-500/10 px-3 py-1 rounded-lg">
+                                <span className="text-rose-400 font-bold text-sm tracking-wide">{price.price}</span>
+                                <span className="text-[10px] text-rose-500 font-bold mr-1">{t.iqd}</span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                        {filteredPriceRecords.length === 0 && (
+                          <div className="col-span-full py-12 text-center">
+                            <div className="inline-flex p-4 bg-white/5 rounded-2xl mb-4">
+                              <CreditCard className="w-8 h-8 text-maroon-700" />
+                            </div>
+                            <h4 className="text-sm font-bold text-maroon-300">
+                              {inventorySearch ? (lang === 'ar' ? 'لا توجد نتائج تتطابق مع بحثك' : 'No results match your search') : t.noRecords}
+                            </h4>
+                            <p className="text-[10px] text-maroon-500">
+                              {inventorySearch 
+                                ? (lang === 'ar' ? 'جرب البحث بكلمات أخرى أو تحقق من القسم' : 'Try searching for different terms or check the category')
+                                : (lang === 'ar' ? 'أضف أسعار القطع الشائعة لتسهيل العمل' : 'Add common part prices to simplify work')}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : selectedCategory === "compatibility" ? (
+                    <div className="space-y-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-900/20">
+                             <Repeat className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-bold">{t.compatibility}</h3>
+                            <p className="text-maroon-400 text-sm">{t.totalItems}: {compatibilityRecords.length}</p>
+                          </div>
+                        </div>
+                        <div className="flex-1 max-w-sm">
+                          <div className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10">
+                            <Search size={14} className="text-maroon-500" />
+                            <input 
+                              type="text"
+                              value={inventorySearch}
+                              onChange={(e) => setInventorySearch(e.target.value)}
+                              placeholder={t.searchPlaceholder}
+                              className="bg-transparent border-none outline-none text-xs w-full"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredCompatibility.map(comp => (
+                          <motion.div 
+                            key={comp.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="glass-dark p-5 rounded-2xl border border-white/5 hover:bg-white/5 transition-all group relative overflow-hidden"
+                          >
+                            <div className="flex items-start justify-between gap-4 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/20">
+                                  <Smartphone size={18} />
+                                </div>
+                                <h4 className="text-lg font-bold text-white">{comp.deviceName}</h4>
+                              </div>
+                              <button 
+                                onClick={() => deleteCompatibility(comp.id)}
+                                className="p-1.5 text-maroon-700 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="text-[10px] text-maroon-500 font-bold uppercase tracking-wider mb-2 opacity-60">
+                                {t.compatibleDevices}
+                              </div>
+                              <div className="space-y-1.5">
+                                {comp.compatibleItems.map((item: string, idx: number) => {
+                                  const isHighlighted = (searchQuery || inventorySearch) && item.toLowerCase().includes((searchQuery || inventorySearch).toLowerCase());
+                                  return (
+                                    <div key={idx} className={`flex items-center gap-3 text-sm group/item ${isHighlighted ? 'text-blue-300' : 'text-maroon-100'}`}>
+                                      <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold border transition-all ${isHighlighted ? 'bg-blue-500 text-white border-blue-400' : 'bg-white/5 text-blue-400 border-white/5 group-hover/item:bg-blue-500 group-hover/item:text-white'}`}>
+                                        {idx + 1}
+                                      </span>
+                                      <span className="font-medium">{item}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-3xl -mr-16 -mt-16 pointer-events-none" />
+                          </motion.div>
+                        ))}
+                        {filteredCompatibility.length === 0 && (
+                          <div className="col-span-full py-12 text-center">
+                            <div className="inline-flex p-4 bg-white/5 rounded-2xl mb-4">
+                              <Repeat className="w-8 h-8 text-maroon-700" />
+                            </div>
+                            <h4 className="text-sm font-bold text-maroon-300">{t.noRecords}</h4>
+                            <p className="text-[10px] text-maroon-500">{lang === 'ar' ? 'سجل توافق القطع بين الأجهزة المختلفة هنا' : 'Log part compatibility between different devices here'}</p>
                           </div>
                         )}
                       </div>
