@@ -130,6 +130,10 @@ const translations = {
     loginDesc: "اختر طريقة الدخول للبدء",
     googleLogin: "تسجيل الدخول بجوجل",
     guestLogin: "دخول كضيف",
+    adminAccess: "دخول المسؤول",
+    enterCode: "أدخل كود الوصول السري",
+    incorrectCode: "كود خاطئ!",
+    loginAsAdmin: "تسجيل الدخول بصفة مسؤول",
     notifications: "الإشعارات",
     activityLog: "سجل النشاطات",
     noNotifications: "لا توجد إشعارات جديدة",
@@ -226,6 +230,10 @@ const translations = {
     loginDesc: "Choose your entry method",
     googleLogin: "Sign in with Google",
     guestLogin: "Enter as Guest",
+    adminAccess: "Admin Access",
+    enterCode: "Enter Secret Access Code",
+    incorrectCode: "Incorrect Code!",
+    loginAsAdmin: "Log in as Admin",
     notifications: "Notifications",
     activityLog: "Activity Log",
     noNotifications: "No new notifications",
@@ -337,6 +345,10 @@ export default function App() {
   const [maintenanceFilter, setMaintenanceFilter] = useState<'all' | 'pending' | 'ready'>('all');
   const [isPrinting, setIsPrinting] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
+  
+  const [isAdminCodeOpen, setIsAdminCodeOpen] = useState(false);
+  const [secretCode, setSecretCode] = useState("");
+  const [codeError, setCodeError] = useState(false);
 
   const filteredInventory = useMemo(() => {
     return products.filter(p => 
@@ -655,7 +667,25 @@ export default function App() {
     closeModals();
   };
 
-  const handleLogin = (method: 'google' | 'guest') => {
+  const handleLogin = (method: 'google' | 'guest' | 'admin') => {
+    if (method === 'admin') {
+      if (secretCode === "1902") {
+        setIsLoggedIn(true);
+        setCurrentUser({
+          name: 'Admin',
+          type: 'admin',
+          avatar: 'https://ui-avatars.com/api/?name=Admin&background=F43F5E&color=fff'
+        });
+        setIsAdminCodeOpen(false);
+        setSecretCode("");
+        setCodeError(false);
+      } else {
+        setCodeError(true);
+        setTimeout(() => setCodeError(false), 1000);
+      }
+      return;
+    }
+
     setIsLoggedIn(true);
     setCurrentUser({
       name: method === 'google' ? 'Hamad' : 'Guest User',
@@ -675,52 +705,137 @@ export default function App() {
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="max-w-md w-full glass p-6 rounded-[2rem] text-center space-y-4 shadow-2xl relative z-10"
+          className="max-w-md w-full glass p-8 rounded-[2.5rem] text-center space-y-8 shadow-2xl relative z-10 border border-white/5"
         >
-          <div className="space-y-2">
-            <div className="w-12 h-12 bg-rose-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3">
-              <Smartphone className="w-6 h-6 text-white" />
+          <div className="space-y-3">
+            <div className="w-16 h-16 bg-rose-600 rounded-[1.25rem] mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3 group-hover:rotate-6 transition-transform">
+              <Smartphone className="w-8 h-8 text-white" />
             </div>
-            <div className="space-y-0.5">
-              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
                 {t.title}
               </h1>
-              <p className="text-maroon-400 text-xs font-medium">{t.loginDesc}</p>
+              <p className="text-maroon-400 text-xs font-medium opacity-70 italic">{t.loginDesc}</p>
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-4">
             <motion.button 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleLogin('google')}
-              className="w-full glass-dark py-3 rounded-xl flex items-center justify-center gap-3 hover:bg-white/10 transition-all group overflow-hidden relative"
+              onClick={() => handleLogin('guest')}
+              className="w-full glass-dark py-4 rounded-2xl flex items-center justify-between px-6 hover:bg-white/10 transition-all group overflow-hidden relative border border-white/5"
             >
-              <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-4 h-4 group-hover:scale-110 transition-transform" alt="Google" />
-              <span className="font-bold text-sm">{t.googleLogin}</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center group-hover:bg-rose-500/20 group-hover:text-rose-400 transition-all">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div className={`text-${lang === 'ar' ? 'right' : 'left'}`}>
+                  <span className="font-bold text-base block">{t.guestLogin}</span>
+                  <span className="text-[10px] text-maroon-400 opacity-60">
+                    {lang === 'ar' ? 'تصفح المخزن فقط' : 'Browse stock only'}
+                  </span>
+                </div>
+              </div>
+              <ChevronLeft className={`w-4 h-4 text-maroon-600 group-hover:text-rose-400 transition-all ${lang === 'ar' ? '' : 'rotate-180'}`} />
             </motion.button>
 
             <motion.button 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleLogin('guest')}
-              className="w-full glass-dark py-3 rounded-xl flex items-center justify-center gap-3 hover:bg-white/5 transition-all text-maroon-400 group"
+              onClick={() => setIsAdminCodeOpen(true)}
+              className="w-full glass-dark py-4 rounded-2xl flex items-center justify-between px-6 hover:bg-white/10 transition-all group overflow-hidden relative border border-rose-500/20 bg-rose-500/5 shadow-inner shadow-rose-500/10"
             >
-              <UserCheck className="w-4 h-4 group-hover:text-rose-400 transition-colors" />
-              <span className="font-bold text-sm group-hover:text-rose-400 transition-colors">{t.guestLogin}</span>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center text-rose-400">
+                  <Fingerprint className="w-5 h-5" />
+                </div>
+                <div className={`text-${lang === 'ar' ? 'right' : 'left'}`}>
+                  <span className="font-bold text-base block">{t.adminAccess}</span>
+                  <span className="text-[10px] text-maroon-400 opacity-60">
+                    {lang === 'ar' ? 'لوحة تحكم كاملة' : 'Full access panel'}
+                  </span>
+                </div>
+              </div>
+              <ChevronLeft className={`w-4 h-4 text-maroon-600 group-hover:text-rose-400 transition-all ${lang === 'ar' ? '' : 'rotate-180'}`} />
             </motion.button>
           </div>
 
           <div className="flex items-center justify-center gap-3 pt-2">
             <button 
               onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
-              className="text-[10px] font-bold text-rose-500/60 hover:text-rose-500 transition-colors uppercase tracking-widest"
+              className="text-[10px] font-bold text-rose-500/60 hover:text-rose-500 transition-colors uppercase tracking-widest border-b border-transparent hover:border-rose-500/30 pb-0.5"
             >
               {lang === 'ar' ? 'English Version' : 'النسخة العربية'}
             </button>
           </div>
         </motion.div>
+
+        {/* Admin Code Popup */}
+        <AnimatePresence>
+          {isAdminCodeOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsAdminCodeOpen(false)}
+                className="absolute inset-0 bg-maroon-950/80 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ 
+                  scale: 1, 
+                  opacity: 1, 
+                  y: 0,
+                  x: codeError ? [0, -10, 10, -10, 10, 0] : 0
+                }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="max-w-xs w-full glass p-6 rounded-[2rem] relative z-10 border border-white/10 shadow-2xl space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-10 h-10 bg-rose-600/20 rounded-xl flex items-center justify-center text-rose-400">
+                    <Fingerprint className="w-5 h-5" />
+                  </div>
+                  <button 
+                    onClick={() => setIsAdminCodeOpen(false)}
+                    className="p-2 text-maroon-500 hover:text-rose-400 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <h3 className="text-lg font-bold">{t.adminAccess}</h3>
+                  <p className="text-[10px] text-maroon-400">{t.enterCode}</p>
+                </div>
+
+                <div className="space-y-3">
+                  <input 
+                    type="password"
+                    value={secretCode}
+                    autoFocus
+                    onChange={(e) => setSecretCode(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin('admin')}
+                    className={`w-full bg-white/5 border ${codeError ? 'border-rose-500' : 'border-white/10'} rounded-xl px-4 py-3 text-center text-xl font-bold tracking-widest text-maroon-100 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all placeholder:text-maroon-800`}
+                    placeholder="****"
+                  />
+                  {codeError && (
+                    <p className="text-[10px] text-rose-500 text-center font-bold">{t.incorrectCode}</p>
+                  )}
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleLogin('admin')}
+                    className="w-full bg-rose-600 py-3 rounded-xl font-bold text-sm shadow-lg shadow-rose-600/20 hover:bg-rose-500 transition-colors"
+                  >
+                    {t.loginAsAdmin}
+                  </motion.button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
