@@ -13,7 +13,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22' # تم التحديث لحل مشكلة Capacitor CLI
 
       - name: Build Web
         run: |
@@ -24,27 +24,33 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17' # تم التغيير لـ 17 لضمان استقرار بناء الأندرويد
 
       - name: Initialize Capacitor
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          [ -d "build" ] && mv build dist || true
-          if [ ! -f "capacitor.config.json" ]; then
-            npx cap init "MyApp" "com.app.ai" --web-dir dist
+          
+          # التأكد من وجود مجلد dist لتجنب أخطاء المزامنة
+          mkdir -p dist
+          
+          # إضافة منصة أندرويد إذا لم تكن موجودة ومزامنة الملفات مباشرة
+          # تم إلغاء npx cap init لتجنب مشكلة وجود ملف capacitor.config.ts
+          if [ ! -d "android" ]; then
+            npx cap add android
           fi
-          npx cap add android || true
           npx cap sync android
 
       - name: Force Fix Dependencies
         run: |
-          # سطر سحري لإجبار أندرويد على حل تضارب المكتبات تلقائياً
-          echo "android.useAndroidX=true" > android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
-          
-          # تعديل ملف البناء الأساسي لإلغاء تكرار ملفات Kotlin
-          sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk7") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
-          sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk8") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
+          # التأكد من وجود المجلد قبل التعديل عليه
+          if [ -d "android" ]; then
+            echo "android.useAndroidX=true" > android/gradle.properties
+            echo "android.enableJetifier=true" >> android/gradle.properties
+            
+            # حل مشكلة تكرار مكتبات Kotlin stdlib
+            sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk7") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
+            sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk8") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
+          fi
 
       - name: Build APK
         run: |
