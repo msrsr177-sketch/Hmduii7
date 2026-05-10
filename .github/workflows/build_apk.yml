@@ -13,7 +13,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22' # تم التحديث لحل مشكلة Capacitor CLI
+          node-version: '22'
 
       - name: Build Web
         run: |
@@ -24,17 +24,12 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17' # تم التغيير لـ 17 لضمان استقرار بناء الأندرويد
+          java-version: '17'
 
       - name: Initialize Capacitor
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          
-          # التأكد من وجود مجلد dist لتجنب أخطاء المزامنة
           mkdir -p dist
-          
-          # إضافة منصة أندرويد إذا لم تكن موجودة ومزامنة الملفات مباشرة
-          # تم إلغاء npx cap init لتجنب مشكلة وجود ملف capacitor.config.ts
           if [ ! -d "android" ]; then
             npx cap add android
           fi
@@ -42,12 +37,11 @@ jobs:
 
       - name: Force Fix Dependencies
         run: |
-          # التأكد من وجود المجلد قبل التعديل عليه
           if [ -d "android" ]; then
             echo "android.useAndroidX=true" > android/gradle.properties
             echo "android.enableJetifier=true" >> android/gradle.properties
             
-            # حل مشكلة تكرار مكتبات Kotlin stdlib
+            # حل تضارب مكتبات Kotlin
             sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk7") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
             sed -i '/dependencies {/a \    modules { module("org.jetbrains.kotlin:kotlin-stdlib-jdk8") { replacedBy("org.jetbrains.kotlin:kotlin-stdlib") } }' android/app/build.gradle
           fi
@@ -55,6 +49,10 @@ jobs:
       - name: Build APK
         run: |
           cd android
+          # إصلاح ملف الـ Gradle المعطوب بتحميل نسخة سليمة
+          rm -f gradle/wrapper/gradle-wrapper.jar
+          curl -L https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
