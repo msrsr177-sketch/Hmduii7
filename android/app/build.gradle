@@ -16,6 +16,16 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    // Task to sync the logo from src/assets to Android res
+    task syncAppIcon(type: Copy) {
+        from "../../src/assets/logo.png"
+        into "src/main/res/drawable"
+        rename "logo.png", "ic_app_logo.png"
+    }
+
+    preBuild.dependsOn syncAppIcon
+
     buildTypes {
         release {
             minifyEnabled false
