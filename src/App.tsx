@@ -45,13 +45,14 @@ import {
 } from "lucide-react";
 import { useState, useMemo, FormEvent, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import AppLogo from "./components/AppLogo";
+import { Preferences } from '@capacitor/preferences';
+import { StatusBar, Style } from '@capacitor/status-bar';
 
 type Language = 'ar' | 'en';
 
 const translations = {
   ar: {
-    title: "نيو فون قسم الصيانه",
+    title: "نيو فون",
     searchPlaceholder: "ابحث عن قطعة (شاشة، فلات، كونكتر)...",
     totalItems: "إجمالي القطع",
     itemTypes: "أنواع القطع",
@@ -162,9 +163,10 @@ const translations = {
     compatibilityResults: "نتائج التوافق",
     miscellaneous: "المنوعات",
     trackCount: "عدد المسارات",
+    logout: "تسجيل الخروج",
   },
   en: {
-    title: "New Phone Maintenance",
+    title: "New Phone",
     searchPlaceholder: "Search for a part (screen, flex, connector)...",
     totalItems: "Total Items",
     itemTypes: "Item Types",
@@ -275,6 +277,7 @@ const translations = {
     compatibilityResults: "Compatibility Results",
     miscellaneous: "Miscellaneous",
     trackCount: "Number of Tracks",
+    logout: "Logout",
   }
 };
 
@@ -306,7 +309,7 @@ const CATEGORIES = [
 
 const COMPANIES = [
   { id: "tecno", name: "Tecno", nameKey: "tecno", categoryId: "screens", count: 0 },
-  { id: "iphone", name: "iPhone", nameKey: "iphone", categoryId: "screens", count: 0 },
+  { id: "apple", name: "Apple", nameKey: "iphone", categoryId: "screens", count: 0 },
   { id: "samsung", name: "Samsung", nameKey: "samsung", categoryId: "screens", count: 0 },
   { id: "xiaomi", name: "Xiaomi", nameKey: "xiaomi", categoryId: "screens", count: 0 },
   { id: "huawei", name: "Huawei", nameKey: "huawei", categoryId: "screens", count: 0 },
@@ -315,38 +318,19 @@ const COMPANIES = [
 ];
 
 export default function App() {
-  const [lang, setLang] = useState<Language>(() => {
-    const saved = localStorage.getItem('lang');
-    return (saved as Language) || 'ar';
-  });
+  const [lang, setLang] = useState<Language>('ar');
   const t = translations[lang];
 
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('isLoggedIn') === 'true';
-  });
-  const [currentUser, setCurrentUser] = useState<any>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const [activities, setActivities] = useState<any[]>(() => {
-    const saved = localStorage.getItem('activities');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [hasUnread, setHasUnread] = useState(() => {
-    return localStorage.getItem('hasUnread') === 'true';
-  });
+  const [activities, setActivities] = useState<any[]>([]);
+  const [hasUnread, setHasUnread] = useState(false);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-  const [products, setProducts] = useState<any[]>(() => {
-    const saved = localStorage.getItem('products');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [folders, setFolders] = useState<any[]>(() => {
-    const saved = localStorage.getItem('folders');
-    return saved ? JSON.parse(saved) : COMPANIES;
-  });
+  const [products, setProducts] = useState<any[]>([]);
+  const [folders, setFolders] = useState<any[]>(COMPANIES);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -379,14 +363,8 @@ export default function App() {
 
   const [folderName, setFolderName] = useState("");
 
-  const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>(() => {
-    const saved = localStorage.getItem('maintenance_records');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [withdrawalCount, setWithdrawalCount] = useState(() => {
-    const saved = localStorage.getItem('withdrawal_count');
-    return saved ? parseInt(saved) : 0;
-  });
+  const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
+  const [withdrawalCount, setWithdrawalCount] = useState(0);
   const [maintenanceFilter, setMaintenanceFilter] = useState<'all' | 'pending' | 'ready'>('all');
   const [isPrinting, setIsPrinting] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
@@ -395,15 +373,77 @@ export default function App() {
   const [secretCode, setSecretCode] = useState("");
   const [codeError, setCodeError] = useState(false);
 
-  const [priceRecords, setPriceRecords] = useState<any[]>(() => {
-    const saved = localStorage.getItem('priceRecords');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [priceRecords, setPriceRecords] = useState<any[]>([]);
 
-  const [compatibilityRecords, setCompatibilityRecords] = useState<any[]>(() => {
-    const saved = localStorage.getItem('compatibilityRecords');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [compatibilityRecords, setCompatibilityRecords] = useState<any[]>([]);
+
+  // Compatibility and Price Records initialization...
+  useEffect(() => {
+    const initDevice = async () => {
+      try {
+        await StatusBar.setOverlaysWebView({ overlay: true });
+        await StatusBar.setStyle({ style: Style.Dark });
+      } catch (e) {
+        console.log('StatusBar not available', e);
+      }
+    };
+    initDevice();
+  }, []);
+
+  // Load data from Capacitor Preferences
+  useEffect(() => {
+    const initData = async () => {
+      const { value: p } = await Preferences.get({ key: 'products' });
+      if (p) setProducts(JSON.parse(p));
+
+      const { value: f } = await Preferences.get({ key: 'folders' });
+      if (f) setFolders(JSON.parse(f));
+
+      const { value: m } = await Preferences.get({ key: 'maintenance_records' });
+      if (m) setMaintenanceRecords(JSON.parse(m));
+
+      const { value: w } = await Preferences.get({ key: 'withdrawal_count' });
+      if (w) setWithdrawalCount(parseInt(w));
+
+      const { value: l } = await Preferences.get({ key: 'lang' });
+      if (l) setLang(l as Language);
+
+      const { value: a } = await Preferences.get({ key: 'activities' });
+      if (a) setActivities(JSON.parse(a));
+
+      const { value: pr } = await Preferences.get({ key: 'priceRecords' });
+      if (pr) setPriceRecords(JSON.parse(pr));
+
+      const { value: cr } = await Preferences.get({ key: 'compatibilityRecords' });
+      if (cr) setCompatibilityRecords(JSON.parse(cr));
+
+      const { value: auth } = await Preferences.get({ key: 'isLoggedIn' });
+      if (auth === 'true') {
+        setIsLoggedIn(true);
+        const { value: u } = await Preferences.get({ key: 'user' });
+        if (u) setCurrentUser(JSON.parse(u));
+      }
+    };
+    initData();
+  }, []);
+
+  // Save data to Capacitor Preferences
+  useEffect(() => { saveData('products', products); }, [products]);
+  useEffect(() => { saveData('folders', folders); }, [folders]);
+  useEffect(() => { saveData('maintenance_records', maintenanceRecords); }, [maintenanceRecords]);
+  useEffect(() => { Preferences.set({ key: 'withdrawal_count', value: withdrawalCount.toString() }); }, [withdrawalCount]);
+  useEffect(() => { Preferences.set({ key: 'lang', value: lang }); }, [lang]);
+  useEffect(() => { saveData('activities', activities); }, [activities]);
+  useEffect(() => { saveData('priceRecords', priceRecords); }, [priceRecords]);
+  useEffect(() => { saveData('compatibilityRecords', compatibilityRecords); }, [compatibilityRecords]);
+  useEffect(() => { 
+    Preferences.set({ key: 'isLoggedIn', value: isLoggedIn.toString() });
+    if (currentUser) Preferences.set({ key: 'user', value: JSON.stringify(currentUser) });
+  }, [isLoggedIn, currentUser]);
+
+  const saveData = async (key: string, data: any) => {
+    await Preferences.set({ key, value: JSON.stringify(data) });
+  };
 
   // Navigation handling for mobile back button
   useEffect(() => {
@@ -561,48 +601,6 @@ export default function App() {
     }
   };
 
-  // Persistence Effects
-  useEffect(() => {
-    localStorage.setItem('lang', lang);
-  }, [lang]);
-
-  useEffect(() => {
-    localStorage.setItem('products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('folders', JSON.stringify(folders));
-  }, [folders]);
-
-  useEffect(() => {
-    localStorage.setItem('maintenance_records', JSON.stringify(maintenanceRecords));
-  }, [maintenanceRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('withdrawal_count', withdrawalCount.toString());
-  }, [withdrawalCount]);
-
-  useEffect(() => {
-    localStorage.setItem('isLoggedIn', isLoggedIn.toString());
-    if (currentUser) localStorage.setItem('user', JSON.stringify(currentUser));
-    else localStorage.removeItem('user');
-  }, [isLoggedIn, currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('activities', JSON.stringify(activities));
-  }, [activities]);
-
-  useEffect(() => {
-    localStorage.setItem('hasUnread', hasUnread.toString());
-  }, [hasUnread]);
-
-  useEffect(() => {
-    localStorage.setItem('priceRecords', JSON.stringify(priceRecords));
-  }, [priceRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('compatibilityRecords', JSON.stringify(compatibilityRecords));
-  }, [compatibilityRecords]);
 
   const addActivity = (title: string, desc: string, type: 'add' | 'withdraw' | 'alert') => {
     const newActivity = {
@@ -872,8 +870,7 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <>
-        <AppLogo />
-        <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans relative overflow-hidden flex items-center justify-center p-6 ${lang === 'en' ? '' : 'font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans relative overflow-hidden flex items-center justify-center p-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] ${lang === 'en' ? '' : 'font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="fixed inset-0 overflow-hidden -z-10 pointer-events-none">
           <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-rose-900/40 rounded-full blur-[120px] animate-pulse" />
           <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-maroon-900/30 rounded-full blur-[100px]" />
@@ -1020,8 +1017,7 @@ export default function App() {
 
   return (
     <>
-      <AppLogo />
-      <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans p-2 relative selection:bg-rose-500/30 ${lang === 'en' ? 'font-sans' : ''}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans p-2 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] relative selection:bg-rose-500/30 ${lang === 'en' ? 'font-sans' : ''}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Dynamic background blobs */}
       <div className="fixed inset-0 overflow-hidden -z-10 pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-rose-900/30 rounded-full blur-[120px]" />
@@ -1030,78 +1026,81 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-2 relative z-[100]">
+        <header className="flex items-center justify-between p-3 glass-dark rounded-2xl mb-4 relative z-[100] border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
+          {/* Right side (Title) */}
           <motion.div 
-            initial={{ x: lang === 'ar' ? 50 : -50, opacity: 0 }}
+            initial={{ x: lang === 'ar' ? 20 : -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="space-y-0.5 flex items-center gap-3"
+            className="flex items-center"
           >
-            <h1 className="text-lg md:text-xl font-bold tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
+            <h1 className="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
               {t.title}
             </h1>
+          </motion.div>
+
+          {/* Left side (Actions) */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-white/5 p-1 px-2 rounded-xl border border-white/5">
+              {currentUser?.avatar && (
+                <img src={currentUser.avatar} className="w-5 h-5 rounded-md shadow-lg" alt="Avatar" />
+              )}
+              <div className="hidden md:block">
+                <div className="text-[10px] font-bold leading-tight line-clamp-1 max-w-[100px]">{currentUser?.name}</div>
+              </div>
+              <button 
+                onClick={() => setIsLoggedIn(false)}
+                className="p-1.5 hover:text-rose-400 transition-colors"
+                title={t.logout}
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+
+            <button 
+              onClick={() => {
+                setHasUnread(false);
+                setIsNotificationsOpen(true);
+              }}
+              className="relative p-2 rounded-lg text-rose-400 hover:bg-white/10 transition-all"
+            >
+              <Bell size={18} />
+              {hasUnread && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-maroon-950 animate-pulse" />
+              )}
+            </button>
+
             <button 
               onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
-              className="glass-dark px-2 py-1 rounded-lg text-[10px] font-bold border border-white/10 hover:bg-white/10 transition-all text-rose-400 flex items-center gap-1.5"
+              className="px-2 py-1 rounded-lg text-[10px] font-bold border border-white/10 hover:bg-white/10 transition-all text-rose-400"
             >
               {lang === 'ar' ? 'English' : 'عربي'}
             </button>
+          </div>
+        </header>
 
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => {
-                  setHasUnread(false);
-                  setIsNotificationsOpen(true);
-                }}
-                className="relative glass-dark p-1.5 rounded-lg text-rose-400 hover:bg-white/10 transition-all"
-              >
-                <Bell size={16} />
-                {hasUnread && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-1 ring-maroon-950 animate-bounce" />
-                )}
+        {/* Global Search Bar */}
+        <div className="max-w-xl mx-auto mb-6 relative group px-2">
+          <motion.div 
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className={`glass-dark px-4 py-3 rounded-2xl flex items-center gap-3 transition-all duration-300 shadow-xl ${isSearchFocused ? 'ring-2 ring-rose-500/50 bg-maroon-900/60' : 'border border-white/5'}`}
+          >
+            <Search className={`w-4 h-4 transition-colors ${isSearchFocused ? 'text-rose-400' : 'text-maroon-400'}`} />
+            <input 
+              type="text" 
+              value={searchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t.searchPlaceholder} 
+              className="bg-transparent border-none outline-none text-sm text-maroon-100 placeholder:text-maroon-500/50 w-full"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="hover:text-rose-400 transition-colors p-1">
+                <X className="w-4 h-4" />
               </button>
-
-              <div className="flex items-center gap-2 glass-dark p-1 px-2 rounded-xl border border-white/5">
-                {currentUser?.avatar && (
-                  <img src={currentUser.avatar} className="w-5 h-5 rounded-md shadow-lg" alt="Avatar" />
-                )}
-                <div className="hidden md:block">
-                  <div className="text-[8px] font-bold text-maroon-400 leading-tight uppercase tracking-tighter">
-                    {currentUser?.type === 'google' ? 'Admin' : 'Guest'}
-                  </div>
-                  <div className="text-[10px] font-bold leading-tight">{currentUser?.name}</div>
-                </div>
-                <button 
-                  onClick={() => setIsLoggedIn(false)}
-                  className="p-1 hover:text-rose-400 transition-colors"
-                >
-                  <LogOut size={12} />
-                </button>
-              </div>
-            </div>
+            )}
           </motion.div>
-
-          <div className="relative w-full md:w-80 group">
-            <motion.div 
-              initial={{ x: lang === 'ar' ? -50 : 50, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              className={`glass-dark px-4 py-2 rounded-xl flex items-center gap-2 transition-all duration-300 ${isSearchFocused ? 'ring-1 ring-rose-500/50 bg-maroon-900/60' : ''}`}
-            >
-              <Search className={`w-3.5 h-3.5 transition-colors ${isSearchFocused ? 'text-rose-400' : 'text-maroon-400'}`} />
-              <input 
-                type="text" 
-                value={searchQuery}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t.searchPlaceholder} 
-                className="bg-transparent border-none outline-none text-xs text-maroon-100 placeholder:text-maroon-500/50 w-full"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="hover:text-rose-400 transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </motion.div>
 
             {/* Live Search Results Popover */}
             <AnimatePresence>
@@ -1178,10 +1177,9 @@ export default function App() {
                 </div>
               )}
             </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </header>
+          )}
+        </AnimatePresence>
+      </div>
 
         {/* Main Dashboard View */}
         {!selectedCategory && (
@@ -1485,7 +1483,11 @@ export default function App() {
                         ) : selectedCategory && selectedCategory !== "all_inventory" ? (
                           <>
                             <button 
-                              onClick={() => setActiveForm("product")}
+                              onClick={() => {
+                                setProdBrand(selectedFolder || "");
+                                setProdCategory(selectedCategory && selectedCategory !== "maintenance" && selectedCategory !== "all_inventory" ? selectedCategory : "");
+                                setActiveForm("product");
+                              }}
                               className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group shadow-xl ring-1 ring-emerald-500/30"
                             >
                               <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors">
@@ -1524,7 +1526,11 @@ export default function App() {
                               <span className="font-bold text-sm">{t.addPrice}</span>
                             </button>
                             <button 
-                              onClick={() => setActiveForm("product")}
+                              onClick={() => {
+                                setProdBrand(selectedFolder || "");
+                                setProdCategory(selectedCategory && selectedCategory !== "maintenance" && selectedCategory !== "all_inventory" ? selectedCategory : "");
+                                setActiveForm("product");
+                              }}
                               className="glass px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-white/20 transition-all text-maroon-100 group"
                             >
                               <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors">
@@ -2286,15 +2292,15 @@ export default function App() {
                             ))
                           ) : (
                             <div className="py-6 text-center">
-  <div className="inline-flex p-3 bg-white/5 rounded-full mb-2">
-                                 {(() => {
-                                   const Icon = CATEGORIES.find(c => c.id === selectedCategory)?.icon || Package;
-                                   return <Icon className="w-8 h-8 text-maroon-700" />;
-})()}
-</div>
-<h4 className="text-sm font-bold text-maroon-300">{t.emptyInventory}</h4>
-<p className="text-[10px] text-maroon-500 max-w-xs mx-auto mt-1">
-                                {lang === 'ar' ? `لا توجد أي قطع مضافة في ${t[CATEGORIES.find(c => c.id === selectedCategory)!.nameKey as keyof typeof t]} حاليا.` : `No parts added in ${t[CATEGORIES.find(c => c.id === selectedCategory)!.nameKey as keyof typeof t]} yet.`}
+                              <div className="inline-flex p-3 bg-white/5 rounded-full mb-2">
+                                {(() => {
+                                  const Icon = CATEGORIES.find(c => c.id === selectedCategory)?.icon || Package;
+                                  return <Icon className="w-8 h-8 text-maroon-700" />;
+                                })()}
+                              </div>
+                              <h4 className="text-sm font-bold text-maroon-300">{t.emptyInventory}</h4>
+                              <p className="text-[10px] text-maroon-500 max-w-xs mx-auto mt-1">
+                                {lang === 'ar' ? `لا توجد أي قطع مضافة حاليا.` : `No parts added yet.`}
                               </p>
                             </div>
                           );
