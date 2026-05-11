@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, FormEvent, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import AppLogo from "./components/AppLogo";
 
 type Language = 'ar' | 'en';
 
@@ -63,7 +64,6 @@ const translations = {
     piece: "قطعة",
     backToFolders: "العودة للمجلدات",
     backToCategories: "العودة للأقسام",
-    viewFolderContents: "عرض محتويات المجلد",
     chooseCompany: "اختر الشركة أو أضف منتجاً",
     addFolder: "إضافة مجلد",
     addProduct: "إضافة منتج جديد",
@@ -177,7 +177,6 @@ const translations = {
     piece: "piece",
     backToFolders: "Back to Folders",
     backToCategories: "Back to Categories",
-    viewFolderContents: "View Folder Contents",
     chooseCompany: "Choose Company or Add Product",
     addFolder: "Add Folder",
     addProduct: "Add New Product",
@@ -446,13 +445,19 @@ export default function App() {
   }, [inventorySearch, products]);
 
   const filteredCompatibility = useMemo(() => {
-    if (!searchQuery && !inventorySearch) return compatibilityRecords;
+    let filtered = compatibilityRecords;
+    if (selectedFolder) {
+      filtered = filtered.filter(r => r.brand?.toLowerCase() === selectedFolder.toLowerCase());
+    }
     const term = (searchQuery || inventorySearch).toLowerCase();
-    return compatibilityRecords.filter(r => 
-      r.deviceName.toLowerCase().includes(term) ||
-      r.compatibleItems.some((item: string) => item.toLowerCase().includes(term))
-    );
-  }, [compatibilityRecords, inventorySearch, searchQuery]);
+    if (term) {
+      filtered = filtered.filter(r => 
+        r.deviceName.toLowerCase().includes(term) || 
+        r.compatibleItems.some((item: string) => item.toLowerCase().includes(term))
+      );
+    }
+    return filtered;
+  }, [compatibilityRecords, inventorySearch, searchQuery, selectedFolder]);
 
   const filteredPriceRecords = useMemo(() => {
     const term = inventorySearch.toLowerCase();
@@ -714,6 +719,7 @@ export default function App() {
     const newRecord = {
       id: Date.now(),
       deviceName: compDeviceName,
+      brand: prodBrand || selectedFolder || "Others",
       compatibleItems: compDevicesList.split('\n').filter(i => i.trim() !== ""),
     };
 
@@ -865,7 +871,9 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans relative overflow-hidden flex items-center justify-center p-6 ${lang === 'en' ? '' : 'font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <>
+        <AppLogo />
+        <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans relative overflow-hidden flex items-center justify-center p-6 ${lang === 'en' ? '' : 'font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="fixed inset-0 overflow-hidden -z-10 pointer-events-none">
           <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-rose-900/40 rounded-full blur-[120px] animate-pulse" />
           <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-maroon-900/30 rounded-full blur-[100px]" />
@@ -1006,11 +1014,14 @@ export default function App() {
           )}
         </AnimatePresence>
       </div>
+      </>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans p-2 relative selection:bg-rose-500/30 ${lang === 'en' ? 'font-sans' : ''}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <>
+      <AppLogo />
+      <div className={`min-h-screen bg-maroon-950 text-maroon-50 font-sans p-2 relative selection:bg-rose-500/30 ${lang === 'en' ? 'font-sans' : ''}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Dynamic background blobs */}
       <div className="fixed inset-0 overflow-hidden -z-10 pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-rose-900/30 rounded-full blur-[120px]" />
@@ -1359,13 +1370,10 @@ export default function App() {
                   <span>{selectedFolder ? t.backToFolders : t.backToCategories}</span>
                 </button>
                 <div className={`${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                  <h2 className="text-lg font-bold">
-                    {selectedFolder ? selectedFolder : (CATEGORIES.find(c => c.id === selectedCategory) ? t[CATEGORIES.find(c => c.id === selectedCategory)!.nameKey as keyof typeof t] : "...")}
-                  </h2>
                   {selectedFolder && (
-                    <p className="text-maroon-400 text-[10px]">
-                      {t.viewFolderContents}
-                    </p>
+                    <h2 className="text-lg font-bold">
+                      {selectedFolder}
+                    </h2>
                   )}
                 </div>
               </div>
@@ -1661,6 +1669,26 @@ export default function App() {
 
                           {activeForm === "compatibility" && (
                             <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-maroon-300 ml-1">{t.brandType}</label>
+                              <select 
+                                required
+                                value={prodBrand}
+                                onChange={(e) => setProdBrand(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50 appearance-none cursor-pointer"
+                              >
+                                <option value="" disabled className="bg-maroon-950">...</option>
+                                {MOBILE_BRANDS.map((brand) => (
+                                  <option key={brand} value={brand} className="bg-maroon-950">
+                                    {brand}
+                                  </option>
+                                ))}
+                                <option value="Other" className="bg-maroon-950">{lang === 'ar' ? 'أخرى' : 'Other'}</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {activeForm === "compatibility" && (
+                            <div className="space-y-1.5">
                               <label className="text-xs font-medium text-maroon-300 ml-1">{t.compatibleDevices}</label>
                               <textarea 
                                 required
@@ -1854,32 +1882,10 @@ export default function App() {
               </AnimatePresence>
 
               {/* Main Content Area (Items or Grid) */}
-              {(selectedCategory === "all_inventory" || selectedCategory === "maintenance" || selectedCategory === "prices" || selectedCategory === "compatibility" || selectedFolder) && (
+              {selectedCategory && (selectedFolder || ["all_inventory", "maintenance", "prices"].includes(selectedCategory)) && (
                 <div className="glass rounded-[2rem] p-4 min-h-[300px] border-dashed border-maroon-800/50">
                   {selectedCategory === "all_inventory" ? (
                     <div className="space-y-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="p-2 bg-rose-600 rounded-lg">
-                             <Package className="w-3.5 h-3.5 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold">{t.inventory}</h3>
-                            <p className="text-maroon-400 text-[10px]">{t.totalItems}: {products.reduce((acc, p) => acc + p.quantity, 0)}</p>
-                          </div>
-                        </div>
-
-                        <div className="relative w-full md:w-64">
-                          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-maroon-400" />
-                          <input 
-                            type="text"
-                            value={inventorySearch}
-                            onChange={(e) => setInventorySearch(e.target.value)}
-                            placeholder={t.searchPlaceholder}
-                            className="w-full bg-white/5 border border-white/10 rounded-xl pr-9 pl-4 py-2 text-xs text-maroon-100 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all placeholder:text-maroon-500/50"
-                          />
-                        </div>
-                      </div>
                       <div className="grid grid-cols-1 gap-3">
                         {filteredInventory.length > 0 ? (
                           filteredInventory.map(product => (
@@ -1934,30 +1940,6 @@ export default function App() {
                     </div>
                   ) : selectedCategory === "prices" ? (
                     <div className="space-y-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-rose-600 rounded-2xl shadow-lg shadow-rose-900/20">
-                             <CreditCard className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-2xl font-bold">{t.prices}</h3>
-                            <p className="text-maroon-400 text-sm">{t.totalItems}: {filteredPriceRecords.length}</p>
-                          </div>
-                        </div>
-                        <div className="flex-1 max-w-sm">
-                          <div className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10">
-                            <Search size={14} className="text-maroon-500" />
-                            <input 
-                              type="text"
-                              value={inventorySearch}
-                              onChange={(e) => setInventorySearch(e.target.value)}
-                              placeholder={lang === 'ar' ? 'ابحث بالاسم أو القسم...' : 'Search by name or category...'}
-                              className="bg-transparent border-none outline-none text-xs w-full"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {filteredPriceRecords.map(price => (
                           <motion.div 
@@ -2010,30 +1992,6 @@ export default function App() {
                     </div>
                   ) : selectedCategory === "compatibility" ? (
                     <div className="space-y-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-900/20">
-                             <Repeat className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-2xl font-bold">{t.compatibility}</h3>
-                            <p className="text-maroon-400 text-sm">{t.totalItems}: {compatibilityRecords.length}</p>
-                          </div>
-                        </div>
-                        <div className="flex-1 max-w-sm">
-                          <div className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10">
-                            <Search size={14} className="text-maroon-500" />
-                            <input 
-                              type="text"
-                              value={inventorySearch}
-                              onChange={(e) => setInventorySearch(e.target.value)}
-                              placeholder={t.searchPlaceholder}
-                              className="bg-transparent border-none outline-none text-xs w-full"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {filteredCompatibility.map(comp => (
                           <motion.div 
@@ -2092,28 +2050,7 @@ export default function App() {
                     </div>
                   ) : selectedCategory === "maintenance" ? (
                     <div className="space-y-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-rose-600 rounded-2xl shadow-lg shadow-rose-900/20">
-                             <UserCheck className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-2xl font-bold">{t.maintenance}</h3>
-                            <p className="text-maroon-400 text-sm">{t.activeCustomers}: {maintenanceRecords.length}</p>
-                          </div>
-                        </div>
-                        <div className="flex-1 max-w-sm">
-                          <div className="glass-dark px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10">
-                            <Search size={14} className="text-maroon-500" />
-                            <input 
-                              type="text"
-                              value={maintenanceSearchQuery}
-                              onChange={(e) => setMaintenanceSearchQuery(e.target.value)}
-                              placeholder={lang === 'ar' ? 'بحث عن اسم زبون...' : 'Search customer name...'}
-                              className="bg-transparent border-none outline-none text-xs w-full"
-                            />
-                          </div>
-                        </div>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                         <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                           {[
                             { id: 'all', label: t.all, count: maintenanceRecords.length },
@@ -2138,7 +2075,7 @@ export default function App() {
                         </div>
                         <button 
                           onClick={() => setActiveForm("customer")}
-                          className="px-6 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition-all shadow-lg shadow-rose-900/40 flex items-center gap-2"
+                          className="px-6 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition-all shadow-lg shadow-rose-900/40 flex items-center gap-2 text-sm"
                         >
                           <Plus className="w-5 h-5" />
                           <span>{t.addCustomer}</span>
@@ -2153,10 +2090,11 @@ export default function App() {
                               if (maintenanceFilter === 'ready') return r.isReady;
                               return true;
                             })
-                            .filter(r => 
-                              r.customerName.toLowerCase().includes(maintenanceSearchQuery.toLowerCase()) ||
-                              r.deviceType.toLowerCase().includes(maintenanceSearchQuery.toLowerCase())
-                            )
+                            .filter(r => {
+                              const term = (searchQuery || maintenanceSearchQuery).toLowerCase();
+                              return r.customerName.toLowerCase().includes(term) ||
+                                     r.deviceType.toLowerCase().includes(term);
+                            })
                             .map(rec => (
                             <motion.div 
                               key={rec.id}
@@ -2252,38 +2190,20 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                       <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-4">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-3 rounded-2xl bg-gradient-to-br ${CATEGORIES.find(c => c.id === selectedCategory)?.color || 'from-rose-600 to-maroon-600'}`}>
-                             {(() => {
-                               const Icon = CATEGORIES.find(c => c.id === selectedCategory)?.icon || Package;
-                               return <Icon className="w-5 h-5 text-white" />;
-                             })()}
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold">{CATEGORIES.find(c => c.id === selectedCategory) ? t[CATEGORIES.find(c => c.id === selectedCategory)!.nameKey as keyof typeof t] : "..."}</h3>
-                            <p className="text-maroon-400 text-[10px]">{t.viewFolderContents}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <select 
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value as any)}
-                            className="glass-dark text-xs px-3 py-2 rounded-xl border border-white/10 outline-none"
-                           >
-                             <option value="name" className="bg-maroon-950">{lang === 'ar' ? 'الاسم' : 'Name'}</option>
-                             <option value="quantity" className="bg-maroon-950">{lang === 'ar' ? 'الكمية' : 'Quantity'}</option>
-                             <option value="brand" className="bg-maroon-950">{lang === 'ar' ? 'الماركة' : 'Brand'}</option>
-                           </select>
-                        </div>
-                      </div>
-
                       <div className="grid grid-cols-1 gap-3">
                         {(() => {
                           const displayed = products
                             .filter(p => {
                               if (p.category !== selectedCategory) return false;
                               if (selectedFolder && p.brand?.toLowerCase() !== selectedFolder.toLowerCase()) return false;
+                              const term = (searchQuery || inventorySearch).toLowerCase();
+                              if (term) {
+                                return (
+                                  p.name.toLowerCase().includes(term) || 
+                                  p.brand.toLowerCase().includes(term) ||
+                                  p.loc?.toLowerCase().includes(term)
+                                );
+                              }
                               return true;
                             })
                             .sort((a, b) => {
@@ -2468,5 +2388,6 @@ export default function App() {
         </p>
       </footer>
     </div>
+    </>
   );
 }
