@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">نيو فون</string>
-    <string name="title_activity_main">نيو فون قسم الصيانه</string>
+    <string name="title_activity_main">نيو فون  </string>
     <string name="package_name">com.msrsr.ai</string>
     <string name="custom_url_scheme">com.msrsr.ai</string>
 </resources>
