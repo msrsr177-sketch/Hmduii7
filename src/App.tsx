@@ -299,7 +299,7 @@ const CATEGORIES = [
   { id: "compatibility", nameKey: "compatibility", icon: Repeat, count: 0, color: "from-blue-500 to-indigo-600" },
   { id: "screens", nameKey: "screens", icon: Smartphone, count: 0, color: "from-rose-500 to-maroon-600" },
   { id: "batteries", nameKey: "batteries", icon: Battery, count: 0, color: "from-emerald-500 to-maroon-600" },
-  { id: "charging-flex", nameKey: "chargingFlex", icon: Zap, count: 0, color: "from-amber-500 to-maroon-600" },
+  { id: "charging_flex", nameKey: "chargingFlex", icon: Zap, count: 0, color: "from-amber-500 to-maroon-600" },
   { id: "disassembled", nameKey: "disassembled", icon: Hammer, count: 0, color: "from-blue-600 to-maroon-600" },
   { id: "speakers", nameKey: "speakers", icon: Headphones, count: 0, color: "from-purple-500 to-maroon-600" },
   { id: "cameras", nameKey: "cameras", icon: Camera, count: 0, color: "from-cyan-500 to-maroon-600" },
@@ -309,7 +309,7 @@ const CATEGORIES = [
   { id: "cpu", nameKey: "cpu", icon: Cpu, count: 0, color: "from-violet-600 to-maroon-600" },
   { id: "motherboard", nameKey: "motherboard", icon: CircuitBoard, count: 0, color: "from-gray-400 to-maroon-600" },
   { id: "connectors", nameKey: "connectors", icon: Cable, count: 0, color: "from-indigo-500 to-maroon-600" },
-  { id: "charging-base", nameKey: "chargingBase", icon: Plug2, count: 0, color: "from-teal-500 to-maroon-600" },
+  { id: "charging_base", nameKey: "chargingBase", icon: Plug2, count: 0, color: "from-teal-500 to-maroon-600" },
   { id: "miscellaneous", nameKey: "miscellaneous", icon: Folders, count: 0, color: "from-slate-500 to-maroon-600" },
 ];
 
@@ -336,7 +336,58 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const [products, setProducts] = useState<any[]>([]);
-  const [folders, setFolders] = useState<any[]>(COMPANIES);
+  const [folders, setFolders] = useState<any[]>([]);
+
+  // Data Migration for Category IDs
+  useEffect(() => {
+    if (products.length > 0) {
+      let changed = false;
+      const migrated = products.map(p => {
+        if (p.category === 'charging-flex') { changed = true; return { ...p, category: 'charging_flex' }; }
+        if (p.category === 'charging-base') { changed = true; return { ...p, category: 'charging_base' }; }
+        return p;
+      });
+      if (changed) {
+        setProducts(migrated);
+        saveData('products', migrated);
+      }
+    }
+  }, [products.length]);
+
+  // Initialize folders with defaults if missing for any category
+  useEffect(() => {
+    const initFolders = async () => {
+      const { value: f } = await Preferences.get({ key: 'folders' });
+      let currentFolders = f ? JSON.parse(f) : [];
+      
+      const stockCategories = CATEGORIES.filter(c => !["prices", "compatibility", "maintenance", "all_inventory"].includes(c.id));
+      let changed = false;
+
+      stockCategories.forEach(cat => {
+        const hasFolders = currentFolders.some((f: any) => f.categoryId === cat.id);
+        if (!hasFolders) {
+          changed = true;
+          COMPANIES.forEach(comp => {
+            currentFolders.push({
+              id: `${cat.id}-${comp.id}-${Date.now()}`,
+              name: comp.name,
+              nameKey: comp.nameKey,
+              categoryId: cat.id,
+              count: 0
+            });
+          });
+        }
+      });
+
+      if (changed || !f) {
+        setFolders(currentFolders);
+        saveData('folders', currentFolders);
+      } else {
+        setFolders(currentFolders);
+      }
+    };
+    initFolders();
+  }, []);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -572,9 +623,13 @@ export default function App() {
         // Preserve unedited fields if needed or refetch from state
       };
       
-      setMaintenanceRecords(prev => prev.map(r => 
-        r.id === editingId ? { ...r, ...finalRecord } : r
-      ));
+      setMaintenanceRecords(prev => {
+        const updated = prev.map(r => 
+          r.id === editingId ? { ...r, ...finalRecord } : r
+        );
+        saveData('maintenance_records', updated);
+        return updated;
+      });
       
       // Get the full record for printing (after merging)
       const existing = maintenanceRecords.find(r => r.id === editingId);
@@ -590,7 +645,11 @@ export default function App() {
         entryDate: formattedDate,
         readyDate: null
       };
-      setMaintenanceRecords(prev => [finalRecord, ...prev]);
+      setMaintenanceRecords(prev => {
+        const updated = [finalRecord, ...prev];
+        saveData('maintenance_records', updated);
+        return updated;
+      });
       addActivity(
         lang === 'ar' ? 'إضافة بطاقة صيانة' : 'Add Maintenance Card',
         `${lang === 'ar' ? 'تمت إضافة بطاقة لـ' : 'Added card for'} ${finalRecord.customerName} (${finalRecord.deviceType})`,
@@ -627,49 +686,73 @@ export default function App() {
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    setMaintenanceRecords(prev => prev.map(rec => 
-      rec.id === id ? { 
-        ...rec, 
-        isReady: !rec.isReady,
-        readyDate: !rec.isReady ? formattedDate : null
-      } : rec
-    ));
+    setMaintenanceRecords(prev => {
+      const updated = prev.map(rec => 
+        rec.id === id ? { 
+          ...rec, 
+          isReady: !rec.isReady,
+          readyDate: !rec.isReady ? formattedDate : null
+        } : rec
+      );
+      saveData('maintenance_records', updated);
+      return updated;
+    });
   };
 
   const withdrawProduct = (id: number) => {
-    setProducts(prev => prev.map(p => {
-      if (p.id === id) {
-        const newQty = Math.max(0, p.quantity - 1);
-        addActivity(
-          t.activity_withdraw,
-          `${t.notificationWithdrawn} ${p.name} (${t.quantity}: ${p.quantity} -> ${newQty})`,
-          'withdraw'
-        );
-        if (newQty < 3 && newQty > 0) {
-          addActivity(t.notificationWithdrawLimit, `${p.name} ${t.quantity}: ${newQty}`, 'alert');
+    setProducts(prev => {
+      const updated = prev.map(p => {
+        if (p.id === id) {
+          const newQty = Math.max(0, p.quantity - 1);
+          addActivity(
+            t.activity_withdraw,
+            `${t.notificationWithdrawn} ${p.name} (${t.quantity}: ${p.quantity} -> ${newQty})`,
+            'withdraw'
+          );
+          if (newQty < 3 && newQty > 0) {
+            addActivity(t.notificationWithdrawLimit, `${p.name} ${t.quantity}: ${newQty}`, 'alert');
+          }
+          return { ...p, quantity: newQty };
         }
-        return { ...p, quantity: newQty };
-      }
-      return p;
-    }));
-    setWithdrawalCount(prev => prev + 1);
+        return p;
+      });
+      saveData('products', updated);
+      return updated;
+    });
+    setWithdrawalCount(prev => {
+      const newCount = prev + 1;
+      Preferences.set({ key: 'withdrawal_count', value: newCount.toString() });
+      return newCount;
+    });
   };
 
   const incrementProduct = (id: number) => {
-    setProducts(prev => prev.map(p => 
-      p.id === id ? { ...p, quantity: p.quantity + 1 } : p
-    ));
+    setProducts(prev => {
+      const updated = prev.map(p => 
+        p.id === id ? { ...p, quantity: p.quantity + 1 } : p
+      );
+      saveData('products', updated);
+      return updated;
+    });
   };
 
   const deleteProduct = (id: number) => {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
-      setProducts(prev => prev.filter(p => p.id !== id));
+      setProducts(prev => {
+        const updated = prev.filter(p => p.id !== id);
+        saveData('products', updated);
+        return updated;
+      });
     }
   };
 
   const deleteRecord = (id: number) => {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه البطاقة؟' : 'Are you sure you want to delete this card?')) {
-      setMaintenanceRecords(prev => prev.filter(r => r.id !== id));
+      setMaintenanceRecords(prev => {
+        const updated = prev.filter(r => r.id !== id);
+        saveData('maintenance_records', updated);
+        return updated;
+      });
     }
   };
 
@@ -731,7 +814,11 @@ export default function App() {
       compatibleItems: compDevicesList.split('\n').filter(i => i.trim() !== ""),
     };
 
-    setCompatibilityRecords(prev => [newRecord, ...prev]);
+    setCompatibilityRecords(prev => {
+      const updated = [newRecord, ...prev];
+      saveData('compatibility', updated);
+      return updated;
+    });
     addActivity(
       lang === 'ar' ? 'إضافة توافق' : 'Add Compatibility',
       `${compDeviceName}`,
@@ -742,7 +829,11 @@ export default function App() {
 
   const deleteCompatibility = (id: number) => {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
-      setCompatibilityRecords(prev => prev.filter(p => p.id !== id));
+      setCompatibilityRecords(prev => {
+        const updated = prev.filter(p => p.id !== id);
+        saveData('compatibility', updated);
+        return updated;
+      });
     }
   };
 
@@ -757,7 +848,11 @@ export default function App() {
       price: priceAmount,
     };
 
-    setPriceRecords(prev => [newRecord, ...prev]);
+    setPriceRecords(prev => {
+      const updated = [newRecord, ...prev];
+      saveData('prices', updated);
+      return updated;
+    });
     addActivity(
       lang === 'ar' ? 'إضافة سعر' : 'Add Price',
       `${pricePartName} - ${priceAmount} ${t.iqd}`,
@@ -768,7 +863,11 @@ export default function App() {
 
   const deletePrice = (id: number) => {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السعر؟' : 'Are you sure you want to delete this price?')) {
-      setPriceRecords(prev => prev.filter(p => p.id !== id));
+      setPriceRecords(prev => {
+        const updated = prev.filter(p => p.id !== id);
+        saveData('prices', updated);
+        return updated;
+      });
     }
   };
 
@@ -854,7 +953,11 @@ export default function App() {
       categoryId: selectedCategory || "screens",
       count: 0
     };
-    setFolders(prev => [...prev, newFolder]);
+    setFolders(prev => {
+      const updated = [...prev, newFolder];
+      saveData('folders', updated);
+      return updated;
+    });
     closeModals();
   };
 
@@ -906,10 +1009,10 @@ export default function App() {
           className="max-w-md w-full glass p-8 rounded-[2.5rem] text-center space-y-8 shadow-2xl relative z-10 border border-white/5"
         >
               <div className="space-y-2">
-                <div className="w-16 h-16 bg-rose-600 rounded-[1.25rem] mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3 group-hover:rotate-6 transition-transform overflow-hidden">
-                  <img src="/src/assets/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => {
-                    (e.target as any).style.display = 'none';
-                    (e.target as any).parentElement.firstChild.style.display = 'block';
+                <div className="w-16 h-16 bg-rose-600 rounded-[1.25rem] mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3 group-hover:rotate-6 transition-transform overflow-hidden relative">
+                  <img src="/assets/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => {
+                    (e.target as any).classList.add('hidden');
+                    (e.target as any).nextElementSibling.classList.remove('hidden');
                   }} />
                   <Smartphone className="w-8 h-8 text-white hidden" />
                 </div>
@@ -1054,17 +1157,21 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <header className="flex items-center justify-between p-2 glass-dark rounded-xl mb-2 relative z-[100] border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
+        <header className="flex items-center justify-between p-1.5 md:p-2 glass-dark rounded-xl mb-2 relative z-[100] border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
           {/* Right side (Title) */}
           <motion.div 
             initial={{ x: lang === 'ar' ? 20 : -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5 md:gap-2"
           >
-            <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center shadow-md overflow-hidden">
-              <img src="/src/assets/logo.png" alt="Icon" className="w-full h-full object-cover" />
+            <div className="w-7 h-7 md:w-8 md:h-8 bg-rose-600 rounded-lg flex items-center justify-center shadow-md overflow-hidden relative">
+              <img src="/assets/logo.png" alt="Icon" className="w-full h-full object-cover" onError={(e) => {
+                (e.target as any).classList.add('hidden');
+                (e.target as any).nextElementSibling.classList.remove('hidden');
+              }} />
+              <Smartphone className="w-3.5 h-3.5 md:w-4 md:h-4 text-white hidden" />
             </div>
-            <h1 className="text-lg md:text-xl font-black tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
+            <h1 className="text-base md:text-lg font-black tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
               {t.title}
             </h1>
           </motion.div>
@@ -1144,32 +1251,25 @@ export default function App() {
             >
               {filteredResults.length > 0 ? (
                 <div className="p-1 space-y-0.5">
-                  <div className="px-3 py-1 text-[9px] font-bold text-maroon-400 uppercase tracking-widest border-b border-white/5 mb-0.5">
-                    نتائج البحث ({filteredResults.length})
+                  <div className="px-2 py-0.5 text-[8px] font-bold text-maroon-400 uppercase tracking-widest border-b border-white/5 mb-0.5">
+                    {lang === 'ar' ? 'نتائج البحث' : 'Search Results'} ({filteredResults.length})
                   </div>
                   {filteredResults.map((product) => (
                     <div
                       key={product.id}
-                      className="w-full text-right px-2 py-1.5 rounded-lg hover:bg-white/5 flex items-center justify-between group transition-colors"
+                      className="w-full text-right px-2 py-1 rounded-lg hover:bg-white/5 flex items-center justify-between group transition-colors"
                     >
-                      <div className="flex items-center gap-2">
-                        <div className={`p-1.5 rounded-lg ${product.quantity < 3 ? 'bg-amber-500/20 text-amber-500' : 'bg-rose-500/20 text-rose-400'}`}>
-                          {product.category === 'screens' ? <Smartphone size={12} /> : <Zap size={12} />}
+                      <div className="flex items-center gap-1.5">
+                        <div className={`p-1 rounded-lg ${product.quantity < 3 ? 'bg-amber-500/20 text-amber-500' : 'bg-rose-500/20 text-rose-400'}`}>
+                          {product.category === 'screens' ? <Smartphone size={10} /> : <Zap size={10} />}
                         </div>
                         <div>
-                          <div className="flex items-center gap-1.5">
-                            <div className="font-bold text-[10px] text-maroon-50">{product.name}</div>
-                            {product.quantity < 3 && (
-                              <span className="text-[7px] bg-amber-500/20 text-amber-500 px-1 py-0.5 rounded font-bold uppercase ring-1 ring-amber-500/30">
-                                {lang === 'ar' ? 'منخفض' : 'Low'}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[8px] text-maroon-400 flex gap-1.5">
-                            <span className={product.quantity < 3 ? 'text-amber-500' : ''}>{t.quantity}: {product.quantity}</span>
-                            <span>•</span>
-                            <span>{t.location}: {product.loc}</span>
-                          </div>
+                            <div className="font-bold text-[9px] text-maroon-50">{product.name}</div>
+                            <div className="text-[7px] text-maroon-400 flex gap-1">
+                              <span className={product.quantity < 3 ? 'text-amber-500' : ''}>{t.quantity}: {product.quantity}</span>
+                              <span>•</span>
+                              <span>{t.location}: {product.loc}</span>
+                            </div>
                         </div>
                       </div>
                       
@@ -1178,23 +1278,22 @@ export default function App() {
                           onClick={() => startEditProduct(product)}
                           className="p-1 text-maroon-700 hover:text-emerald-500 transition-colors"
                         >
-                          <Settings size={10} />
+                          <Settings size={9} />
                         </button>
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           disabled={product.quantity <= 0}
                           onClick={() => withdrawProduct(product.id)}
-                          className={`px-2 py-1 rounded-lg text-[8px] font-bold transition-all flex items-center gap-1 ${
+                          className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold transition-all flex items-center gap-1 ${
                             product.quantity > 0 
                             ? 'bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white' 
                             : 'bg-maroon-900/40 text-maroon-600 cursor-not-allowed'
                           }`}
                         >
-                          <History size={8} />
+                          <History size={7} />
                           {t.withdrawPiece}
                         </motion.button>
-                        <ArrowUpRight className="w-2 h-2 text-maroon-600 group-hover:text-rose-400 transition-colors" />
                       </div>
                     </div>
                   ))}
@@ -1408,44 +1507,73 @@ export default function App() {
               </div>
 
               {/* Sub-Folders View (Generalized for all categories) */}
-              {selectedCategory && selectedCategory !== "all_inventory" && selectedCategory !== "maintenance" && selectedCategory !== "prices" && !selectedFolder && (
+              {selectedCategory && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) && !selectedFolder && (
                 <motion.div 
                   variants={containerVariants}
                   initial="hidden"
                   animate="visible"
-                  className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2"
+                  className="space-y-4"
                 >
-                  {folders.filter(f => f.categoryId === selectedCategory).map((company, idx) => {
-                    const prodCount = products.filter(p => p.category === selectedCategory && p.brand?.toLowerCase() === (company.name || "").toLowerCase()).length;
-                    return (
-                      <motion.div
-                        key={`${company.id}-${idx}`}
-                        variants={itemVariants}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setSelectedFolder(company.name)}
-                        className="glass rounded-xl p-2 flex flex-col items-center justify-center cursor-pointer group hover:bg-rose-900/20 transition-all border-rose-900/0 hover:border-rose-500/30"
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                    {(() => {
+                      const currentCategoryFolders = folders.filter(f => f.categoryId === selectedCategory);
+                      const mainBrandNames = COMPANIES.filter(c => c.id !== 'others').map(c => c.name.toLowerCase());
+                      
+                      return currentCategoryFolders.map((company, idx) => {
+                        const isOthers = company.nameKey === 'others' || company.name.toLowerCase() === 'others';
+                        const prodCount = products.filter(p => {
+                          if (p.category !== selectedCategory) return false;
+                          const pBrand = (p.brand || "").toLowerCase();
+                          if (isOthers) {
+                            return pBrand === 'others' || pBrand === '' || !mainBrandNames.includes(pBrand);
+                          }
+                          return pBrand === company.name.toLowerCase();
+                        }).length;
+
+                        return (
+                          <motion.div
+                            key={`${company.id}-${idx}`}
+                            variants={itemVariants}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setSelectedFolder(company.name)}
+                            className="glass rounded-xl p-2 flex flex-col items-center justify-center cursor-pointer group hover:bg-rose-900/20 transition-all border-rose-900/0 hover:border-rose-500/30"
+                          >
+                            <div className="p-2 bg-maroon-900/40 rounded-lg mb-2 group-hover:bg-rose-600 group-hover:text-white transition-all text-rose-500">
+                              <Folder className="w-4 h-4" />
+                            </div>
+                            <span className="font-bold text-xs">{company.nameKey ? t[company.nameKey as keyof typeof t] : company.name}</span>
+                            <span className="text-[9px] text-maroon-500 mt-0.5">{prodCount} {t.piece}</span>
+                          </motion.div>
+                        );
+                      });
+                    })()}
+                    
+                    <motion.div
+                      variants={itemVariants}
+                      whileHover={{ scale: 1.05 }}
+                      onClick={() => setActiveForm("folder")}
+                      className="glass border-dashed border-maroon-800 rounded-xl p-2 flex flex-col items-center justify-center cursor-pointer group hover:border-rose-500/50 transition-all"
+                    >
+                      <div className="p-2 bg-white/5 rounded-lg mb-2 group-hover:bg-rose-600/20 transition-all text-maroon-700 group-hover:text-rose-400">
+                        <FolderPlus className="w-4 h-4" />
+                      </div>
+                      <span className="font-medium text-[10px] text-maroon-500">{t.addFolder}</span>
+                    </motion.div>
+                  </div>
+
+                  {/* Fallback: If no folders exist for this category but products do, show them here or show a helpful message */}
+                  {folders.filter(f => f.categoryId === selectedCategory).length === 0 && products.filter(p => p.category === selectedCategory).length > 0 && (
+                    <div className="p-4 glass rounded-xl border border-rose-500/20 text-center">
+                      <p className="text-xs text-maroon-300 mb-2">{lang === 'ar' ? 'هذه الفئة تحتوي على منتجات ولكن لا توجد مجلدات.' : 'This category has products but no folders.'}</p>
+                      <button 
+                        onClick={() => setSelectedFolder("all_items_fallback")}
+                        className="text-[10px] font-bold text-rose-400 underline"
                       >
-                        <div className="p-2 bg-maroon-900/40 rounded-lg mb-2 group-hover:bg-rose-600 group-hover:text-white transition-all text-rose-500">
-                          <Folder className="w-4 h-4" />
-                        </div>
-                        <span className="font-bold text-xs">{company.nameKey ? t[company.nameKey as keyof typeof t] : company.name}</span>
-                        <span className="text-[9px] text-maroon-500 mt-0.5">{prodCount} {t.piece}</span>
-                      </motion.div>
-                    );
-                  })}
-                  
-                  <motion.div
-                    variants={itemVariants}
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => setActiveForm("folder")}
-                    className="glass border-dashed border-maroon-800 rounded-xl p-2 flex flex-col items-center justify-center cursor-pointer group hover:border-rose-500/50 transition-all"
-                  >
-                    <div className="p-2 bg-white/5 rounded-lg mb-2 group-hover:bg-rose-600/20 transition-all text-maroon-700 group-hover:text-rose-400">
-                      <FolderPlus className="w-4 h-4" />
+                        {lang === 'ar' ? 'عرض جميع المنتجات في هذه الفئة' : 'View all products in this category'}
+                      </button>
                     </div>
-                    <span className="font-medium text-[10px] text-maroon-500">{t.addFolder}</span>
-                  </motion.div>
+                  )}
                 </motion.div>
               )}
 
@@ -2266,7 +2394,21 @@ export default function App() {
                           const displayed = products
                             .filter(p => {
                               if (p.category !== selectedCategory) return false;
-                              if (selectedFolder && p.brand?.toLowerCase() !== selectedFolder.toLowerCase()) return false;
+                              
+                              if (selectedFolder === "all_items_fallback") return true;
+
+                              if (selectedFolder) {
+                                const isOthersFolder = selectedFolder.toLowerCase() === 'others';
+                                const mainBrandNames = COMPANIES.filter(c => c.id !== 'others').map(c => c.name.toLowerCase());
+                                const pBrand = (p.brand || "").toLowerCase();
+                                
+                                if (isOthersFolder) {
+                                  if (pBrand !== 'others' && pBrand !== '' && mainBrandNames.includes(pBrand)) return false;
+                                } else {
+                                  if (pBrand !== selectedFolder.toLowerCase()) return false;
+                                }
+                              }
+                              
                               const term = (searchQuery || inventorySearch).toLowerCase();
                               if (term) {
                                 return (
