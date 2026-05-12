@@ -164,6 +164,9 @@ const translations = {
     miscellaneous: "المنوعات",
     trackCount: "عدد المسارات",
     logout: "تسجيل الخروج",
+    productPrice: "سعر القطعة",
+    productImage: "رابط الصورة (اختياري)",
+    viewImage: "عرض الصورة",
   },
   en: {
     title: "New Phone",
@@ -278,6 +281,9 @@ const translations = {
     miscellaneous: "Miscellaneous",
     trackCount: "Number of Tracks",
     logout: "Logout",
+    productPrice: "Product Price",
+    productImage: "Image URL (Optional)",
+    viewImage: "View Image",
   }
 };
 
@@ -353,6 +359,8 @@ export default function App() {
   const [prodLoc, setProdLoc] = useState("");
   const [prodBrand, setProdBrand] = useState("");
   const [prodCategory, setProdCategory] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodImage, setProdImage] = useState("");
 
   const [pricePartName, setPricePartName] = useState("");
   const [pricePartCategory, setPricePartCategory] = useState("");
@@ -702,6 +710,8 @@ export default function App() {
     setProdLoc("");
     setProdBrand(selectedFolder || "");
     setProdCategory(selectedCategory && selectedCategory !== "maintenance" && selectedCategory !== "all_inventory" ? selectedCategory : "");
+    setProdPrice("");
+    setProdImage("");
     setFolderName("");
     setPricePartName("");
     setPricePartCategory("");
@@ -783,17 +793,23 @@ export default function App() {
 
   const handleEditProduct = (e: FormEvent) => {
     e.preventDefault();
-    setProducts(prev => prev.map(p => 
-      p.id === editingId ? {
-        ...p,
-        name: prodName,
-        quantity: parseInt(prodQty) || 0,
-        loc: prodLoc,
-        brand: prodBrand,
-        category: prodCategory
-      } : p
-    ));
-    closeModals();
+    if (editingId && prodName) {
+      const updated = products.map(p => 
+        p.id === editingId ? {
+          ...p,
+          name: prodName,
+          quantity: parseInt(prodQty) || 0,
+          loc: prodLoc,
+          brand: prodBrand,
+          category: prodCategory || p.category || "screens",
+          price: prodPrice,
+          image: prodImage
+        } : p
+      );
+      setProducts(updated);
+      saveData('products', updated);
+      closeModals();
+    }
   };
 
   const handleEditCustomer = (e: FormEvent) => {
@@ -804,21 +820,29 @@ export default function App() {
 
   const handleAddProduct = (e: FormEvent) => {
     e.preventDefault();
-    const newProduct = {
-      id: Date.now(),
-      name: prodName,
-      quantity: parseInt(prodQty) || 0,
-      loc: prodLoc,
-      brand: prodBrand || "Others",
-      category: prodCategory || (selectedCategory && selectedCategory !== "all_inventory" && selectedCategory !== "maintenance" ? selectedCategory : "screens")
-    };
-    setProducts(prev => [newProduct, ...prev]);
-    addActivity(
-      t.activity_add,
-      `${t.notificationAdded} ${newProduct.name} (${t.quantity}: ${newProduct.quantity})`,
-      'add'
-    );
-    closeModals();
+    if (prodName) {
+      const newProduct = {
+        id: Date.now(),
+        name: prodName,
+        quantity: parseInt(prodQty) || 0,
+        loc: prodLoc,
+        brand: prodBrand || "Others",
+        category: prodCategory || (selectedCategory && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) ? selectedCategory : "screens"),
+        price: prodPrice,
+        image: prodImage,
+        createdAt: new Date().toLocaleDateString()
+      };
+      const updated = [newProduct, ...products];
+      setProducts(updated);
+      saveData('products', updated);
+      
+      addActivity(
+        t.activity_add,
+        `${t.notificationAdded} ${newProduct.name} (${t.quantity}: ${newProduct.quantity})`,
+        'add'
+      );
+      closeModals();
+    }
   };
 
   const handleAddFolder = (e: FormEvent) => {
@@ -881,17 +905,21 @@ export default function App() {
           animate={{ scale: 1, opacity: 1 }}
           className="max-w-md w-full glass p-8 rounded-[2.5rem] text-center space-y-8 shadow-2xl relative z-10 border border-white/5"
         >
-          <div className="space-y-3">
-            <div className="w-16 h-16 bg-rose-600 rounded-[1.25rem] mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3 group-hover:rotate-6 transition-transform">
-              <Smartphone className="w-8 h-8 text-white" />
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
-                {t.title}
-              </h1>
-              <p className="text-maroon-400 text-xs font-medium opacity-70 italic">{t.loginDesc}</p>
-            </div>
-          </div>
+              <div className="space-y-2">
+                <div className="w-16 h-16 bg-rose-600 rounded-[1.25rem] mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3 group-hover:rotate-6 transition-transform overflow-hidden">
+                  <img src="/src/assets/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => {
+                    (e.target as any).style.display = 'none';
+                    (e.target as any).parentElement.firstChild.style.display = 'block';
+                  }} />
+                  <Smartphone className="w-8 h-8 text-white hidden" />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
+                    {t.title}
+                  </h1>
+                  <p className="text-maroon-400 text-[10px] font-medium opacity-60 italic">{t.loginDesc}</p>
+                </div>
+              </div>
 
           <div className="space-y-4">
             <motion.button 
@@ -1026,14 +1054,17 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <header className="flex items-center justify-between p-3 glass-dark rounded-2xl mb-4 relative z-[100] border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
+        <header className="flex items-center justify-between p-2 glass-dark rounded-xl mb-2 relative z-[100] border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
           {/* Right side (Title) */}
           <motion.div 
             initial={{ x: lang === 'ar' ? 20 : -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="flex items-center"
+            className="flex items-center gap-2"
           >
-            <h1 className="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
+            <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center shadow-md overflow-hidden">
+              <img src="/src/assets/logo.png" alt="Icon" className="w-full h-full object-cover" />
+            </div>
+            <h1 className="text-lg md:text-xl font-black tracking-tight bg-gradient-to-l from-maroon-100 to-rose-400 bg-clip-text text-transparent">
               {t.title}
             </h1>
           </motion.div>
@@ -1079,13 +1110,13 @@ export default function App() {
         </header>
 
         {/* Global Search Bar */}
-        <div className="max-w-xl mx-auto mb-6 relative group px-2">
+        <div className="max-w-xl mx-auto mb-4 relative group px-2">
           <motion.div 
             initial={{ y: -10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className={`glass-dark px-4 py-3 rounded-2xl flex items-center gap-3 transition-all duration-300 shadow-xl ${isSearchFocused ? 'ring-2 ring-rose-500/50 bg-maroon-900/60' : 'border border-white/5'}`}
+            className={`glass-dark px-3 py-2 rounded-xl flex items-center gap-3 transition-all duration-300 shadow-xl ${isSearchFocused ? 'ring-2 ring-rose-500/50 bg-maroon-900/60' : 'border border-white/5'}`}
           >
-            <Search className={`w-4 h-4 transition-colors ${isSearchFocused ? 'text-rose-400' : 'text-maroon-400'}`} />
+            <Search className={`w-3.5 h-3.5 transition-colors ${isSearchFocused ? 'text-rose-400' : 'text-maroon-400'}`} />
             <input 
               type="text" 
               value={searchQuery}
@@ -1093,7 +1124,7 @@ export default function App() {
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t.searchPlaceholder} 
-              className="bg-transparent border-none outline-none text-sm text-maroon-100 placeholder:text-maroon-500/50 w-full"
+              className="bg-transparent border-none outline-none text-xs text-maroon-100 placeholder:text-maroon-500/50 w-full"
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery("")} className="hover:text-rose-400 transition-colors p-1">
@@ -1183,23 +1214,23 @@ export default function App() {
 
         {/* Main Dashboard View */}
         {!selectedCategory && (
-          <div className="space-y-3 mb-6">
+          <div className="space-y-2 mb-4">
             {/* Quick Compatibility Results when searching */}
             {searchQuery && filteredCompatibility.length > 0 && (
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-6 space-y-3"
+                className="mb-4 space-y-2"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-3 w-1 bg-blue-500 rounded-full" />
-                  <h2 className="text-[10px] font-bold text-blue-100 uppercase tracking-widest">{t.compatibilityResults}</h2>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-2 w-1 bg-blue-500 rounded-full" />
+                  <h2 className="text-[9px] font-bold text-blue-100 uppercase tracking-widest">{t.compatibilityResults}</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {filteredCompatibility.slice(0, 4).map(comp => (
                     <div 
                       key={comp.id} 
-                      className="glass-dark p-3 rounded-xl border border-blue-500/10 flex flex-col gap-2 cursor-pointer hover:bg-white/5 transition-all"
+                      className="glass-dark p-2 rounded-lg border border-blue-500/10 flex flex-col gap-1 cursor-pointer hover:bg-white/5 transition-all"
                       onClick={() => {
                         setSelectedCategory('compatibility');
                         setInventorySearch(comp.deviceName);
@@ -1207,17 +1238,17 @@ export default function App() {
                       }}
                     >
                       <div className="flex items-center gap-2">
-                        <Smartphone size={14} className="text-blue-400" />
-                        <span className="text-xs font-bold text-white">{comp.deviceName}</span>
+                        <Smartphone size={12} className="text-blue-400" />
+                        <span className="text-[11px] font-bold text-white">{comp.deviceName}</span>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1">
                         {comp.compatibleItems.slice(0, 3).map((item: string, i: number) => (
-                          <span key={i} className="text-[9px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-md border border-blue-500/20">
+                          <span key={i} className="text-[8px] bg-blue-500/10 text-blue-300 px-1.5 py-0.5 rounded-md border border-blue-500/20">
                             {item}
                           </span>
                         ))}
                         {comp.compatibleItems.length > 3 && (
-                          <span className="text-[9px] text-maroon-600">+{comp.compatibleItems.length - 3}</span>
+                          <span className="text-[8px] text-maroon-600">+{comp.compatibleItems.length - 3}</span>
                         )}
                       </div>
                     </div>
@@ -1228,13 +1259,13 @@ export default function App() {
                         setSelectedCategory('compatibility');
                         setSearchQuery("");
                       }}
-                      className="col-span-full text-[10px] text-blue-400 font-bold hover:underline py-1 text-center"
+                      className="col-span-full text-[9px] text-blue-400 font-bold hover:underline py-0.5 text-center"
                     >
                       {lang === 'ar' ? 'عرض جميع نتائج التوافق' : 'Show all compatibility results'}
                     </button>
                   )}
                 </div>
-                <div className="h-px bg-white/5 w-full my-4" />
+                <div className="h-px bg-white/5 w-full my-2" />
               </motion.div>
             )}
 
@@ -1244,34 +1275,34 @@ export default function App() {
               initial="hidden"
               animate="visible"
               onClick={() => setSelectedCategory("maintenance")}
-              className="glass rounded-2xl p-5 flex flex-col items-center justify-center text-center group hover:bg-white/10 transition-all cursor-pointer shadow-2xl shadow-black/30 min-h-[140px] border border-white/10"
+              className="glass rounded-xl p-3 flex flex-col items-center justify-center text-center group hover:bg-white/10 transition-all cursor-pointer shadow-xl shadow-black/30 min-h-[100px] border border-white/10"
             >
-              <div className="p-2.5 bg-rose-600 rounded-xl mb-3 group-hover:scale-110 transition-transform">
-                <Wrench className="w-5 h-5 text-white" />
+              <div className="p-2 bg-rose-600 rounded-lg mb-2 group-hover:scale-110 transition-transform">
+                <Wrench className="w-4 h-4 text-white" />
               </div>
-              <div className="text-xs text-maroon-300 mb-1 uppercase font-bold tracking-widest">{t.maintenanceStatus}</div>
-              <div className="text-3xl font-bold text-white">
+              <div className="text-[10px] text-maroon-300 mb-0.5 uppercase font-bold tracking-widest">{t.maintenanceStatus}</div>
+              <div className="text-2xl font-bold text-white">
                 {maintenanceRecords.filter(r => !r.isReady).length}
               </div>
-              <div className="text-[9px] text-maroon-500 mt-2 font-bold uppercase tracking-tight opacity-70">
+              <div className="text-[8px] text-maroon-500 mt-1 font-bold uppercase tracking-tight opacity-70">
                 {lang === 'ar' ? 'بطاقات الصيانة الحالية' : 'Current Maintenance Cards'}
               </div>
             </motion.div>
 
             {/* Two Side-by-Side Sections */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <motion.div
                 variants={itemVariants}
                 initial="hidden"
                 animate="visible"
                 onClick={() => setSelectedCategory("all_inventory")}
-                className="glass rounded-xl p-3 flex flex-col items-center justify-center text-center group hover:bg-white/10 transition-all cursor-pointer shadow-xl shadow-black/20 border border-white/5"
+                className="glass rounded-lg p-2.5 flex flex-col items-center justify-center text-center group hover:bg-white/10 transition-all cursor-pointer shadow-lg shadow-black/20 border border-white/5"
               >
-                <div className="p-2 bg-rose-600/20 rounded-lg mb-1.5 group-hover:rotate-6 transition-transform">
-                  <Package className="w-4 h-4 text-rose-400" />
+                <div className="p-1.5 bg-rose-600/20 rounded-md mb-1 group-hover:rotate-6 transition-transform">
+                  <Package className="w-3.5 h-3.5 text-rose-400" />
                 </div>
-                <div className="text-[9px] text-maroon-400 mb-0.5 uppercase font-bold tracking-tight">{t.totalItems}</div>
-                <div className="text-xl font-bold">{products.reduce((acc, p) => acc + p.quantity, 0)}</div>
+                <div className="text-[8px] text-maroon-400 mb-0.5 uppercase font-bold tracking-tight">{t.totalItems}</div>
+                <div className="text-lg font-bold">{products.reduce((acc, p) => acc + p.quantity, 0)}</div>
               </motion.div>
 
               <motion.div
@@ -1279,32 +1310,32 @@ export default function App() {
                 initial="hidden"
                 animate="visible"
                 onClick={() => setIsNotificationsOpen(true)}
-                className="glass rounded-xl p-3 flex flex-col items-center justify-center text-center group hover:bg-white/10 transition-all cursor-pointer shadow-xl shadow-black/20 border border-white/5"
+                className="glass rounded-lg p-2.5 flex flex-col items-center justify-center text-center group hover:bg-white/10 transition-all cursor-pointer shadow-lg shadow-black/20 border border-white/5"
               >
-                <div className="p-2 bg-rose-600/20 rounded-lg mb-1.5 group-hover:-rotate-6 transition-transform">
-                  <History className="w-4 h-4 text-rose-400" />
+                <div className="p-1.5 bg-rose-600/20 rounded-md mb-1 group-hover:-rotate-6 transition-transform">
+                  <History className="w-3.5 h-3.5 text-rose-400" />
                 </div>
-                <div className="text-[9px] text-maroon-400 mb-0.5 uppercase font-bold tracking-tight">{t.withdrawals}</div>
-                <div className="text-xl font-bold">{withdrawalCount}</div>
+                <div className="text-[8px] text-maroon-400 mb-0.5 uppercase font-bold tracking-tight">{t.withdrawals}</div>
+                <div className="text-lg font-bold">{withdrawalCount}</div>
               </motion.div>
             </div>
 
             {/* Categories Grid Restored */}
-            <div className="pt-4">
+            <div className="pt-2">
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex items-center gap-2 mb-3"
+                className="flex items-center gap-2 mb-2"
               >
-                <div className="h-3 w-1 bg-rose-600 rounded-full" />
-                <h2 className="text-sm font-bold text-maroon-100 uppercase tracking-widest">{t.mainCategories}</h2>
+                <div className="h-2.5 w-1 bg-rose-600 rounded-full" />
+                <h2 className="text-[12px] font-bold text-maroon-100 uppercase tracking-widest">{t.mainCategories}</h2>
               </motion.div>
 
               <motion.div 
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2"
+                className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2"
               >
                 {CATEGORIES.filter(c => c.id !== 'all_inventory' && c.id !== 'maintenance').map((cat) => {
                   const catCount = cat.id === 'prices' ? priceRecords.length : 
@@ -1318,7 +1349,7 @@ export default function App() {
                     <motion.div
                       key={cat.id}
                       variants={itemVariants}
-                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => {
                         setSelectedCategory(cat.id);
@@ -1327,9 +1358,9 @@ export default function App() {
                       }}
                       className="group cursor-pointer relative overflow-hidden"
                     >
-                      <div className="glass rounded-xl p-2 h-full flex flex-col items-center justify-center relative z-10 text-center transition-all bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20">
-                        <div className={`p-2 rounded-lg bg-gradient-to-br ${cat.color} shadow-md shadow-maroon-900/40 mb-2 group-hover:rotate-6 transition-transform`}>
-                          <cat.icon className="w-3.5 h-3.5 text-white" />
+                      <div className="glass rounded-lg p-2 h-full flex flex-col items-center justify-center relative z-10 text-center transition-all bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 min-h-[70px]">
+                        <div className={`p-1.5 rounded-md bg-gradient-to-br ${cat.color} shadow-md shadow-maroon-900/40 mb-1.5 group-hover:rotate-6 transition-transform`}>
+                          <cat.icon className="w-3 h-3 text-white" />
                         </div>
                         <h3 className="text-[10px] font-bold mb-0.5 group-hover:text-rose-300 transition-colors line-clamp-1">{t[cat.nameKey as keyof typeof t]}</h3>
                         <div className="flex items-center gap-1 text-[8px] text-maroon-400 font-bold uppercase opacity-60">
@@ -1814,6 +1845,31 @@ export default function App() {
                           )}
 
                           {activeForm?.includes("product") && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-maroon-300 ml-1">{t.productPrice}</label>
+                                <input 
+                                  type="text" 
+                                  value={prodPrice}
+                                  onChange={(e) => setProdPrice(e.target.value)}
+                                  placeholder="25,000"
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-maroon-300 ml-1">{t.productImage}</label>
+                                <input 
+                                  type="text" 
+                                  value={prodImage}
+                                  onChange={(e) => setProdImage(e.target.value)}
+                                  placeholder="https://..."
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {activeForm?.includes("product") && (
                             <div className="space-y-1.5">
                               <label className="text-xs font-medium text-maroon-300 ml-1">{t.location}</label>
                               <input 
@@ -1897,8 +1953,12 @@ export default function App() {
                           filteredInventory.map(product => (
                             <div key={product.id} className="glass-dark p-4 rounded-xl flex items-center justify-between gap-4 group hover:bg-white/5 transition-all border border-white/5">
                               <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${product.quantity < 3 ? 'bg-amber-500/10 text-amber-500' : 'bg-maroon-900/40 text-rose-400'}`}>
-                                  {product.category === 'screens' ? <Smartphone size={16} /> : <Zap size={16} />}
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${product.quantity < 3 ? 'bg-amber-500/10 text-amber-500' : 'bg-maroon-900/40 text-rose-400'} overflow-hidden`}>
+                                  {product.image ? (
+                                    <img src={product.image} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    product.category === 'screens' ? <Smartphone size={16} /> : <Zap size={16} />
+                                  )}
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -1906,6 +1966,11 @@ export default function App() {
                                     {product.quantity < 3 && (
                                       <span className="text-[9px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded-lg border border-amber-500/20 uppercase font-bold">
                                         {lang === 'ar' ? 'مخزون منخفض' : 'Low Stock'}
+                                      </span>
+                                    )}
+                                    {product.price && (
+                                      <span className="text-[10px] text-emerald-400 font-bold">
+                                        {product.price} {t.iqd}
                                       </span>
                                     )}
                                   </div>
@@ -2234,8 +2299,21 @@ export default function App() {
                                           {lang === 'ar' ? 'منخفض' : 'Low'}
                                         </span>
                                       )}
+                                      {product.price && (
+                                        <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/5 px-1 rounded ml-1">
+                                          {product.price} {t.iqd}
+                                        </span>
+                                      )}
                                     </div>
-                                    <div className="text-[9px] text-maroon-400">{product.brand} - {t.location}: {product.loc}</div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-[9px] text-maroon-400">{product.brand} - {t.location}: {product.loc}</div>
+                                      {product.image && (
+                                        <a href={product.image} target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:underline flex items-center gap-0.5">
+                                          <Camera size={8} />
+                                          {t.viewImage}
+                                        </a>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                                 <div className="flex items-center justify-between md:justify-end gap-2 md:gap-4">
