@@ -1950,31 +1950,6 @@ export default function App() {
                           )}
 
                           {activeForm?.includes("product") && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-maroon-300 ml-1">{t.productPrice}</label>
-                                <input 
-                                  type="text" 
-                                  value={prodPrice}
-                                  onChange={(e) => setProdPrice(e.target.value)}
-                                  placeholder="25,000"
-                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-maroon-300 ml-1">{t.productImage}</label>
-                                <input 
-                                  type="text" 
-                                  value={prodImage}
-                                  onChange={(e) => setProdImage(e.target.value)}
-                                  placeholder="https://..."
-                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {activeForm?.includes("product") && (
                             <div className="space-y-1.5">
                               <label className="text-xs font-medium text-maroon-300 ml-1">{t.location}</label>
                               <input 
@@ -2049,7 +2024,7 @@ export default function App() {
               </AnimatePresence>
 
               {/* Main Content Area (Items or Grid) */}
-              {selectedCategory && (selectedFolder || ["all_inventory", "maintenance", "prices"].includes(selectedCategory)) && (
+              {selectedCategory && (selectedFolder || ["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory)) && (
                 <div className="glass rounded-[2rem] p-4 min-h-[300px] border-dashed border-maroon-800/50">
                   {selectedCategory === "all_inventory" ? (
                     <div className="space-y-6">
@@ -2408,7 +2383,10 @@ export default function App() {
                               <div key={product.id} className="glass-dark p-2 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-1 group hover:bg-white/5 transition-all max-h-32 overflow-hidden">
                                 <div className="flex items-center gap-2">
                                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${product.quantity < 3 ? 'bg-amber-500/20 text-amber-500' : 'bg-maroon-900/40 text-rose-400'}`}>
-                                    {product.category === 'screens' ? <Smartphone size={14} /> : <Zap size={14} />}
+                                    {(() => {
+                                      const Icon = CATEGORIES.find(c => c.id === product.category)?.icon || Package;
+                                      return <Icon size={14} />;
+                                    })()}
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-1.5">
