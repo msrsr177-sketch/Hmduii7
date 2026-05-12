@@ -338,10 +338,11 @@ export default function App() {
 
   const [products, setProducts] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // Data Migration for Category IDs
   useEffect(() => {
-    if (products.length > 0) {
+    if (isDataLoaded && products.length > 0) {
       let changed = false;
       const migrated = products.map(p => {
         if (p.category === 'charging-flex') { changed = true; return { ...p, category: 'charging_flex' }; }
@@ -350,10 +351,9 @@ export default function App() {
       });
       if (changed) {
         setProducts(migrated);
-        saveData('products', migrated);
       }
     }
-  }, [products.length]);
+  }, [products.length, isDataLoaded]);
 
   // Initialize folders with defaults if missing for any category
   useEffect(() => {
@@ -494,23 +494,26 @@ export default function App() {
         const { value: u } = await Preferences.get({ key: 'user' });
         if (u) setCurrentUser(JSON.parse(u));
       }
+      setIsDataLoaded(true);
     };
     initData();
   }, []);
 
   // Save data to Capacitor Preferences
-  useEffect(() => { saveData('products', products); }, [products]);
-  useEffect(() => { saveData('folders', folders); }, [folders]);
-  useEffect(() => { saveData('maintenance_records', maintenanceRecords); }, [maintenanceRecords]);
-  useEffect(() => { Preferences.set({ key: 'withdrawal_count', value: withdrawalCount.toString() }); }, [withdrawalCount]);
-  useEffect(() => { Preferences.set({ key: 'lang', value: lang }); }, [lang]);
-  useEffect(() => { saveData('activities', activities); }, [activities]);
-  useEffect(() => { saveData('priceRecords', priceRecords); }, [priceRecords]);
-  useEffect(() => { saveData('compatibilityRecords', compatibilityRecords); }, [compatibilityRecords]);
+  useEffect(() => { if (isDataLoaded) saveData('products', products); }, [products, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) saveData('folders', folders); }, [folders, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) saveData('maintenance_records', maintenanceRecords); }, [maintenanceRecords, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) Preferences.set({ key: 'withdrawal_count', value: withdrawalCount.toString() }); }, [withdrawalCount, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) Preferences.set({ key: 'lang', value: lang }); }, [lang, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) saveData('activities', activities); }, [activities, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) saveData('priceRecords', priceRecords); }, [priceRecords, isDataLoaded]);
+  useEffect(() => { if (isDataLoaded) saveData('compatibilityRecords', compatibilityRecords); }, [compatibilityRecords, isDataLoaded]);
   useEffect(() => { 
-    Preferences.set({ key: 'isLoggedIn', value: isLoggedIn.toString() });
-    if (currentUser) Preferences.set({ key: 'user', value: JSON.stringify(currentUser) });
-  }, [isLoggedIn, currentUser]);
+    if (isDataLoaded) {
+      Preferences.set({ key: 'isLoggedIn', value: isLoggedIn.toString() });
+      if (currentUser) Preferences.set({ key: 'user', value: JSON.stringify(currentUser) });
+    }
+  }, [isLoggedIn, currentUser, isDataLoaded]);
 
   const saveData = async (key: string, data: any) => {
     await Preferences.set({ key, value: JSON.stringify(data) });
@@ -875,7 +878,7 @@ export default function App() {
   const handleEditProduct = (e: FormEvent) => {
     e.preventDefault();
     if (editingId && prodName) {
-      const updated = products.map(p => 
+      setProducts(prev => prev.map(p => 
         p.id === editingId ? {
           ...p,
           name: prodName,
@@ -886,8 +889,7 @@ export default function App() {
           price: prodPrice,
           image: prodImage
         } : p
-      );
-      setProducts(updated);
+      ));
       closeModals();
     }
   };
@@ -912,9 +914,7 @@ export default function App() {
         image: prodImage,
         createdAt: new Date().toLocaleDateString()
       };
-      const updated = [newProduct, ...products];
-      setProducts(updated);
-      saveData('products', updated);
+      setProducts(prev => [newProduct, ...prev]);
       
       addActivity(
         t.activity_add,
