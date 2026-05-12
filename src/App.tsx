@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, FormEvent, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { Preferences } from '@capacitor/preferences';
 import { StatusBar, Style } from '@capacitor/status-bar';
 
@@ -379,14 +380,25 @@ export default function App() {
         }
       });
 
-      if (changed || !f) {
-        setFolders(currentFolders);
-        saveData('folders', currentFolders);
-      } else {
-        setFolders(currentFolders);
-      }
+      setFolders(currentFolders);
     };
     initFolders();
+
+    // Request Notification Permissions
+    const requestPerms = async () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+      try {
+        const status = await LocalNotifications.checkPermissions();
+        if (status.display !== 'granted') {
+          await LocalNotifications.requestPermissions();
+        }
+      } catch (err) {
+        console.log("Local notifications not supported on this platform", err);
+      }
+    };
+    requestPerms();
   }, []);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -627,7 +639,6 @@ export default function App() {
         const updated = prev.map(r => 
           r.id === editingId ? { ...r, ...finalRecord } : r
         );
-        saveData('maintenance_records', updated);
         return updated;
       });
       
@@ -645,11 +656,7 @@ export default function App() {
         entryDate: formattedDate,
         readyDate: null
       };
-      setMaintenanceRecords(prev => {
-        const updated = [finalRecord, ...prev];
-        saveData('maintenance_records', updated);
-        return updated;
-      });
+      setMaintenanceRecords(prev => [finalRecord, ...prev]);
       addActivity(
         lang === 'ar' ? 'إضافة بطاقة صيانة' : 'Add Maintenance Card',
         `${lang === 'ar' ? 'تمت إضافة بطاقة لـ' : 'Added card for'} ${finalRecord.customerName} (${finalRecord.deviceType})`,
@@ -694,7 +701,6 @@ export default function App() {
           readyDate: !rec.isReady ? formattedDate : null
         } : rec
       );
-      saveData('maintenance_records', updated);
       return updated;
     });
   };
@@ -716,14 +722,9 @@ export default function App() {
         }
         return p;
       });
-      saveData('products', updated);
       return updated;
     });
-    setWithdrawalCount(prev => {
-      const newCount = prev + 1;
-      Preferences.set({ key: 'withdrawal_count', value: newCount.toString() });
-      return newCount;
-    });
+    setWithdrawalCount(prev => prev + 1);
   };
 
   const incrementProduct = (id: number) => {
@@ -731,7 +732,6 @@ export default function App() {
       const updated = prev.map(p => 
         p.id === id ? { ...p, quantity: p.quantity + 1 } : p
       );
-      saveData('products', updated);
       return updated;
     });
   };
@@ -740,7 +740,6 @@ export default function App() {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
       setProducts(prev => {
         const updated = prev.filter(p => p.id !== id);
-        saveData('products', updated);
         return updated;
       });
     }
@@ -750,7 +749,6 @@ export default function App() {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه البطاقة؟' : 'Are you sure you want to delete this card?')) {
       setMaintenanceRecords(prev => {
         const updated = prev.filter(r => r.id !== id);
-        saveData('maintenance_records', updated);
         return updated;
       });
     }
@@ -814,11 +812,7 @@ export default function App() {
       compatibleItems: compDevicesList.split('\n').filter(i => i.trim() !== ""),
     };
 
-    setCompatibilityRecords(prev => {
-      const updated = [newRecord, ...prev];
-      saveData('compatibility', updated);
-      return updated;
-    });
+    setCompatibilityRecords(prev => [newRecord, ...prev]);
     addActivity(
       lang === 'ar' ? 'إضافة توافق' : 'Add Compatibility',
       `${compDeviceName}`,
@@ -829,11 +823,7 @@ export default function App() {
 
   const deleteCompatibility = (id: number) => {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
-      setCompatibilityRecords(prev => {
-        const updated = prev.filter(p => p.id !== id);
-        saveData('compatibility', updated);
-        return updated;
-      });
+      setCompatibilityRecords(prev => prev.filter(p => p.id !== id));
     }
   };
 
@@ -848,11 +838,7 @@ export default function App() {
       price: priceAmount,
     };
 
-    setPriceRecords(prev => {
-      const updated = [newRecord, ...prev];
-      saveData('prices', updated);
-      return updated;
-    });
+    setPriceRecords(prev => [newRecord, ...prev]);
     addActivity(
       lang === 'ar' ? 'إضافة سعر' : 'Add Price',
       `${pricePartName} - ${priceAmount} ${t.iqd}`,
@@ -863,11 +849,7 @@ export default function App() {
 
   const deletePrice = (id: number) => {
     if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السعر؟' : 'Are you sure you want to delete this price?')) {
-      setPriceRecords(prev => {
-        const updated = prev.filter(p => p.id !== id);
-        saveData('prices', updated);
-        return updated;
-      });
+      setPriceRecords(prev => prev.filter(p => p.id !== id));
     }
   };
 
@@ -906,7 +888,6 @@ export default function App() {
         } : p
       );
       setProducts(updated);
-      saveData('products', updated);
       closeModals();
     }
   };
@@ -953,11 +934,7 @@ export default function App() {
       categoryId: selectedCategory || "screens",
       count: 0
     };
-    setFolders(prev => {
-      const updated = [...prev, newFolder];
-      saveData('folders', updated);
-      return updated;
-    });
+    setFolders(prev => [...prev, newFolder]);
     closeModals();
   };
 
@@ -1010,7 +987,7 @@ export default function App() {
         >
               <div className="space-y-2">
                 <div className="w-16 h-16 bg-rose-600 rounded-[1.25rem] mx-auto flex items-center justify-center shadow-lg shadow-rose-950/50 rotate-3 group-hover:rotate-6 transition-transform overflow-hidden relative">
-                  <img src="/assets/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => {
+                  <img src="assets/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => {
                     (e.target as any).classList.add('hidden');
                     (e.target as any).nextElementSibling.classList.remove('hidden');
                   }} />
@@ -1165,7 +1142,7 @@ export default function App() {
             className="flex items-center gap-1.5 md:gap-2"
           >
             <div className="w-7 h-7 md:w-8 md:h-8 bg-rose-600 rounded-lg flex items-center justify-center shadow-md overflow-hidden relative">
-              <img src="/assets/logo.png" alt="Icon" className="w-full h-full object-cover" onError={(e) => {
+              <img src="assets/logo.png" alt="Icon" className="w-full h-full object-cover" onError={(e) => {
                 (e.target as any).classList.add('hidden');
                 (e.target as any).nextElementSibling.classList.remove('hidden');
               }} />

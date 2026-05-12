@@ -1,6 +1,6 @@
 {
   "name": "new phone",
   "description": "تطبيق مخزن احترافي لقطع غيار الهواتف (شاشات، فلاتات، كونكترات) بتصميم زجاجي عصري.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["notifications"],
   "majorCapabilities": []
 }
