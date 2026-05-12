@@ -41,9 +41,11 @@ import {
   Printer,
   Bluetooth,
   UserPlus,
-  Repeat
+  Repeat,
+  Trash2,
+  Copy
 } from "lucide-react";
-import { useState, useMemo, FormEvent, useEffect } from "react";
+import React, { useState, useMemo, FormEvent, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Preferences } from '@capacitor/preferences';
@@ -314,16 +316,6 @@ const CATEGORIES = [
   { id: "miscellaneous", nameKey: "miscellaneous", icon: Folders, count: 0, color: "from-slate-500 to-maroon-600" },
 ];
 
-const COMPANIES = [
-  { id: "tecno", name: "Tecno", nameKey: "tecno", categoryId: "screens", count: 0 },
-  { id: "apple", name: "Apple", nameKey: "iphone", categoryId: "screens", count: 0 },
-  { id: "samsung", name: "Samsung", nameKey: "samsung", categoryId: "screens", count: 0 },
-  { id: "xiaomi", name: "Xiaomi", nameKey: "xiaomi", categoryId: "screens", count: 0 },
-  { id: "huawei", name: "Huawei", nameKey: "huawei", categoryId: "screens", count: 0 },
-  { id: "infinix", name: "Infinix", nameKey: "infinix", categoryId: "screens", count: 0 },
-  { id: "others", name: "Others", nameKey: "others", categoryId: "screens", count: 0 },
-];
-
 export default function App() {
   const [lang, setLang] = useState<Language>('ar');
   const t = translations[lang];
@@ -355,31 +347,11 @@ export default function App() {
     }
   }, [products.length, isDataLoaded]);
 
-  // Initialize folders with defaults if missing for any category
+  // Initialize folders
   useEffect(() => {
     const initFolders = async () => {
       const { value: f } = await Preferences.get({ key: 'folders' });
       let currentFolders = f ? JSON.parse(f) : [];
-      
-      const stockCategories = CATEGORIES.filter(c => !["prices", "compatibility", "maintenance", "all_inventory"].includes(c.id));
-      let changed = false;
-
-      stockCategories.forEach(cat => {
-        const hasFolders = currentFolders.some((f: any) => f.categoryId === cat.id);
-        if (!hasFolders) {
-          changed = true;
-          COMPANIES.forEach(comp => {
-            currentFolders.push({
-              id: `${cat.id}-${comp.id}-${Date.now()}`,
-              name: comp.name,
-              nameKey: comp.nameKey,
-              categoryId: cat.id,
-              count: 0
-            });
-          });
-        }
-      });
-
       setFolders(currentFolders);
     };
     initFolders();
@@ -447,6 +419,48 @@ export default function App() {
   const [priceRecords, setPriceRecords] = useState<any[]>([]);
 
   const [compatibilityRecords, setCompatibilityRecords] = useState<any[]>([]);
+  const [expandedCompatibilityId, setExpandedCompatibilityId] = useState<string | null>(null);
+
+  const [longPressedFolderId, setLongPressedFolderId] = useState<string | null>(null);
+  const longPressTimer = useRef<any>(null);
+
+  const [toast, setToast] = useState<{message: string, show: boolean}>({message: '', show: false});
+
+  const showToast = (message: string) => {
+    setToast({message, show: true});
+    setTimeout(() => setToast(prev => ({...prev, show: false})), 2000);
+  };
+
+  const startLongPress = (id: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setLongPressedFolderId(id);
+    }, 800);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(lang === 'ar' ? 'تم نسخ النص بنجاح!' : 'Text copied successfully!');
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
+  const handleDeleteFolder = (id: string, e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا المجلد؟' : 'Are you sure you want to delete this folder?')) {
+      setFolders(prev => prev.filter(f => f.id !== id));
+      setLongPressedFolderId(null);
+    }
+  };
 
   // Compatibility and Price Records initialization...
   useEffect(() => {
@@ -464,6 +478,15 @@ export default function App() {
   // Load data from Capacitor Preferences
   useEffect(() => {
     const initData = async () => {
+      // CLEAR ALL DATA FOR PRODUCTION (ONE-TIME RUN)
+      const { value: isCleared } = await Preferences.get({ key: 'prod_v1_cleared' });
+      if (isCleared !== 'true') {
+        await Preferences.clear();
+        await Preferences.set({ key: 'prod_v1_cleared', value: 'true' });
+        setIsDataLoaded(true);
+        return;
+      }
+
       const { value: p } = await Preferences.get({ key: 'products' });
       if (p) setProducts(JSON.parse(p));
 
@@ -740,20 +763,14 @@ export default function App() {
   };
 
   const deleteProduct = (id: number) => {
-    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
-      setProducts(prev => {
-        const updated = prev.filter(p => p.id !== id);
-        return updated;
-      });
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
+      setProducts(prev => prev.filter(p => p.id !== id));
     }
   };
 
   const deleteRecord = (id: number) => {
-    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه البطاقة؟' : 'Are you sure you want to delete this card?')) {
-      setMaintenanceRecords(prev => {
-        const updated = prev.filter(r => r.id !== id);
-        return updated;
-      });
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه البطاقة؟' : 'Are you sure you want to delete this card?')) {
+      setMaintenanceRecords(prev => prev.filter(r => r.id !== id));
     }
   };
 
@@ -825,7 +842,7 @@ export default function App() {
   };
 
   const deleteCompatibility = (id: number) => {
-    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
       setCompatibilityRecords(prev => prev.filter(p => p.id !== id));
     }
   };
@@ -851,7 +868,7 @@ export default function App() {
   };
 
   const deletePrice = (id: number) => {
-    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السعر؟' : 'Are you sure you want to delete this price?')) {
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السعر؟' : 'Are you sure you want to delete this price?')) {
       setPriceRecords(prev => prev.filter(p => p.id !== id));
     }
   };
@@ -1483,8 +1500,22 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Sub-Folders View (Generalized for all categories) */}
-              {selectedCategory && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) && !selectedFolder && (
+          {/* Sub-Folders View (Generalized for all categories) */}
+          <AnimatePresence>
+            {toast.show && (
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 50 }}
+                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9999] glass-dark px-6 py-3 rounded-full border border-blue-500/30 text-blue-400 font-bold shadow-2xl flex items-center gap-2"
+              >
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                {toast.message}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {selectedCategory && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) && !selectedFolder && (
                 <motion.div 
                   variants={containerVariants}
                   initial="hidden"
@@ -1494,16 +1525,12 @@ export default function App() {
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
                     {(() => {
                       const currentCategoryFolders = folders.filter(f => f.categoryId === selectedCategory);
-                      const mainBrandNames = COMPANIES.filter(c => c.id !== 'others').map(c => c.name.toLowerCase());
                       
                       return currentCategoryFolders.map((company, idx) => {
-                        const isOthers = company.nameKey === 'others' || company.name.toLowerCase() === 'others';
+                        const isSelectedForDeletion = longPressedFolderId === company.id;
                         const prodCount = products.filter(p => {
                           if (p.category !== selectedCategory) return false;
                           const pBrand = (p.brand || "").toLowerCase();
-                          if (isOthers) {
-                            return pBrand === 'others' || pBrand === '' || !mainBrandNames.includes(pBrand);
-                          }
                           return pBrand === company.name.toLowerCase();
                         }).length;
 
@@ -1513,9 +1540,36 @@ export default function App() {
                             variants={itemVariants}
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => setSelectedFolder(company.name)}
-                            className="glass rounded-xl p-2 flex flex-col items-center justify-center cursor-pointer group hover:bg-rose-900/20 transition-all border-rose-900/0 hover:border-rose-500/30"
+                            onClick={() => {
+                              if (longPressedFolderId) {
+                                setLongPressedFolderId(null);
+                              } else {
+                                setSelectedFolder(company.name);
+                              }
+                            }}
+                            onMouseDown={() => startLongPress(company.id)}
+                            onMouseUp={cancelLongPress}
+                            onMouseLeave={cancelLongPress}
+                            onTouchStart={() => startLongPress(company.id)}
+                            onTouchEnd={cancelLongPress}
+                            className="relative glass rounded-xl p-2 flex flex-col items-center justify-center cursor-pointer group hover:bg-rose-900/20 transition-all border-rose-900/0 hover:border-rose-500/30"
                           >
+                            {isSelectedForDeletion && (
+                              <div
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onMouseUp={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDeleteFolder(company.id, e);
+                                }}
+                                className="absolute -top-3 -right-3 p-3 bg-gradient-to-br from-rose-500 to-rose-700 text-white rounded-full shadow-[0_0_20px_rgba(225,29,72,0.4)] z-[100] cursor-pointer hover:scale-110 active:scale-90 transition-all border-2 border-white/30"
+                              >
+                                <Trash2 size={18} />
+                              </div>
+                            )}
                             <div className="p-2 bg-maroon-900/40 rounded-lg mb-2 group-hover:bg-rose-600 group-hover:text-white transition-all text-rose-500">
                               <Folder className="w-4 h-4" />
                             </div>
@@ -2141,53 +2195,93 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                  ) : selectedCategory === "compatibility" ? (
+                    ) : selectedCategory === "compatibility" ? (
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {filteredCompatibility.map(comp => (
-                          <motion.div 
-                            key={comp.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="glass-dark p-5 rounded-2xl border border-white/5 hover:bg-white/5 transition-all group relative overflow-hidden"
-                          >
-                            <div className="flex items-start justify-between gap-4 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/20">
-                                  <Smartphone size={18} />
+                        {filteredCompatibility.map(comp => {
+                          const isExpanded = expandedCompatibilityId === comp.id;
+                          return (
+                            <motion.div 
+                              key={comp.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              onClick={() => setExpandedCompatibilityId(isExpanded ? null : comp.id)}
+                              className="glass-dark p-5 rounded-2xl border border-white/5 hover:bg-white/5 transition-all group relative overflow-hidden cursor-pointer"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/20">
+                                    <Smartphone size={18} />
+                                  </div>
+                                  <h4 className="text-lg font-bold text-white">{comp.deviceName}</h4>
                                 </div>
-                                <h4 className="text-lg font-bold text-white">{comp.deviceName}</h4>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteCompatibility(comp.id);
+                                    }}
+                                    className="p-1.5 text-maroon-700 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                  <motion.div
+                                    animate={{ rotate: isExpanded ? 180 : 0 }}
+                                    className="text-maroon-500 group-hover:text-blue-400 transition-colors"
+                                  >
+                                    <ChevronDown size={18} />
+                                  </motion.div>
+                                </div>
                               </div>
-                              <button 
-                                onClick={() => deleteCompatibility(comp.id)}
-                                className="p-1.5 text-maroon-700 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-                              >
-                                <X size={16} />
-                              </button>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <div className="text-[10px] text-maroon-500 font-bold uppercase tracking-wider mb-2 opacity-60">
-                                {t.compatibleDevices}
-                              </div>
-                              <div className="space-y-1.5">
-                                {comp.compatibleItems.map((item: string, idx: number) => {
-                                  const isHighlighted = (searchQuery || inventorySearch) && item.toLowerCase().includes((searchQuery || inventorySearch).toLowerCase());
-                                  return (
-                                    <div key={idx} className={`flex items-center gap-3 text-sm group/item ${isHighlighted ? 'text-blue-300' : 'text-maroon-100'}`}>
-                                      <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold border transition-all ${isHighlighted ? 'bg-blue-500 text-white border-blue-400' : 'bg-white/5 text-blue-400 border-white/5 group-hover/item:bg-blue-500 group-hover/item:text-white'}`}>
-                                        {idx + 1}
-                                      </span>
-                                      <span className="font-medium">{item}</span>
+                              
+                              <AnimatePresence>
+                                {isExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                                    animate={{ height: "auto", opacity: 1, marginTop: 16 }}
+                                    exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="space-y-3">
+                                      <div className="flex items-center gap-2 text-[10px] text-maroon-400 font-medium pb-2 border-b border-white/5 uppercase tracking-wider">
+                                        <span className="opacity-50">{lang === 'ar' ? 'الماركة:' : 'Brand:'}</span>
+                                        <span className="text-blue-400 font-bold">{comp.brand}</span>
+                                      </div>
+
+                                      <div className="space-y-2">
+                                        <div className="text-[10px] text-maroon-500 font-bold uppercase tracking-wider mb-2 opacity-60">
+                                          {t.compatibleDevices}
+                                        </div>
+                                      <div className="space-y-1.5">
+                                        {comp.compatibleItems.map((item: string, idx: number) => {
+                                          const isHighlighted = (searchQuery || inventorySearch) && item.toLowerCase().includes((searchQuery || inventorySearch).toLowerCase());
+                                          return (
+                                            <div 
+                                              key={idx} 
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                copyToClipboard(item);
+                                              }}
+                                              className={`flex items-center gap-3 text-sm group/item cursor-pointer active:scale-95 transition-transform ${isHighlighted ? 'text-blue-300' : 'text-maroon-100'}`}
+                                            >
+                                              <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold border transition-all ${isHighlighted ? 'bg-blue-500 text-white border-blue-400' : 'bg-white/5 text-blue-400 border-white/5 group-hover/item:bg-blue-500 group-hover/item:text-white'}`}>
+                                                {idx + 1}
+                                              </span>
+                                              <span className="font-medium">{item}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                            
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-3xl -mr-16 -mt-16 pointer-events-none" />
-                          </motion.div>
-                        ))}
+                                  </div>
+                                </motion.div>
+                                )}
+                              </AnimatePresence>
+                              
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-3xl -mr-16 -mt-16 pointer-events-none" />
+                            </motion.div>
+                          );
+                        })}
                         {filteredCompatibility.length === 0 && (
                           <div className="col-span-full py-12 text-center">
                             <div className="inline-flex p-4 bg-white/5 rounded-2xl mb-4">
@@ -2350,15 +2444,8 @@ export default function App() {
                               if (selectedFolder === "all_items_fallback") return true;
 
                               if (selectedFolder) {
-                                const isOthersFolder = selectedFolder.toLowerCase() === 'others';
-                                const mainBrandNames = COMPANIES.filter(c => c.id !== 'others').map(c => c.name.toLowerCase());
                                 const pBrand = (p.brand || "").toLowerCase();
-                                
-                                if (isOthersFolder) {
-                                  if (pBrand !== 'others' && pBrand !== '' && mainBrandNames.includes(pBrand)) return false;
-                                } else {
-                                  if (pBrand !== selectedFolder.toLowerCase()) return false;
-                                }
+                                if (pBrand !== selectedFolder.toLowerCase()) return false;
                               }
                               
                               const term = (searchQuery || inventorySearch).toLowerCase();
@@ -2389,21 +2476,46 @@ export default function App() {
                                     })()}
                                   </div>
                                   <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <div className="text-[11px] font-bold">{product.name}</div>
-                                      {product.quantity < 3 && (
-                                        <span className="text-[7px] bg-amber-500/10 text-amber-500 px-1 py-0.5 rounded border border-amber-500/20">
-                                          {lang === 'ar' ? 'منخفض' : 'Low'}
-                                        </span>
-                                      )}
-                                      {product.price && (
-                                        <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/5 px-1 rounded ml-1">
-                                          {product.price} {t.iqd}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className="text-[9px] text-maroon-400">{product.brand} - {t.location}: {product.loc}</div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <div 
+                                className="flex items-center gap-1 text-[11px] font-bold cursor-pointer hover:text-blue-400 group/copy transition-all bg-white/5 px-2 py-0.5 rounded-md border border-white/5 active:bg-blue-500/20"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(product.name);
+                                }}
+                              >
+                                {product.name}
+                                <Copy size={8} className="opacity-0 group-hover/copy:opacity-100 transition-opacity text-blue-400" />
+                              </div>
+                              {product.quantity < 3 && (
+                                <span className="text-[7px] bg-amber-500/10 text-amber-500 px-1 py-0.5 rounded border border-amber-500/20">
+                                  {lang === 'ar' ? 'منخفض' : 'Low'}
+                                </span>
+                              )}
+                              {product.price && (
+                                <div 
+                                  className="flex items-center gap-1 text-[9px] text-emerald-400 font-bold bg-emerald-500/5 px-1.5 py-0.5 rounded ml-1 cursor-pointer hover:bg-emerald-500/20 group/copy transition-all border border-emerald-500/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyToClipboard(`${product.price}`);
+                                  }}
+                                >
+                                  {product.price} {t.iqd}
+                                  <Copy size={7} className="opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div 
+                                className="flex items-center gap-1 text-[9px] text-maroon-400 cursor-pointer hover:text-blue-300 group/copy transition-all bg-white/5 px-1.5 rounded"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(`${product.brand} - ${product.loc}`);
+                                }}
+                              >
+                                {product.brand} - {t.location}: {product.loc}
+                                <Copy size={7} className="opacity-0 group-hover/copy:opacity-100 transition-opacity text-blue-300" />
+                              </div>
                                       {product.image && (
                                         <a href={product.image} target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:underline flex items-center gap-0.5">
                                           <Camera size={8} />
