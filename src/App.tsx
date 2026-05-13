@@ -42,14 +42,20 @@ import {
   Bluetooth,
   UserPlus,
   Repeat,
-  Trash2,
-  Copy
+  Trash2
 } from "lucide-react";
 import React, { useState, useMemo, FormEvent, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Preferences } from '@capacitor/preferences';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 type Language = 'ar' | 'en';
 
@@ -383,6 +389,11 @@ export default function App() {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'brand'>('name');
 
+  // Scroll to top on navigation
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [selectedCategory, selectedFolder]);
+
   // Form States
   const [custName, setCustName] = useState("");
   const [custDevice, setCustDevice] = useState("");
@@ -424,11 +435,11 @@ export default function App() {
   const [longPressedFolderId, setLongPressedFolderId] = useState<string | null>(null);
   const longPressTimer = useRef<any>(null);
 
-  const [toast, setToast] = useState<{message: string, show: boolean}>({message: '', show: false});
+  const [toast, setToast] = useState<{message: string, show: boolean, type: 'success' | 'error' | 'info'}>({message: '', show: false, type: 'info'});
 
-  const showToast = (message: string) => {
-    setToast({message, show: true});
-    setTimeout(() => setToast(prev => ({...prev, show: false})), 2000);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({message, show: true, type});
+    setTimeout(() => setToast(prev => ({...prev, show: false})), 3000);
   };
 
   const startLongPress = (id: string) => {
@@ -444,21 +455,13 @@ export default function App() {
     }
   };
 
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast(lang === 'ar' ? 'تم نسخ النص بنجاح!' : 'Text copied successfully!');
-    } catch (err) {
-      console.error('Failed to copy: ', err);
-    }
-  };
-
   const handleDeleteFolder = (id: string, e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا المجلد؟' : 'Are you sure you want to delete this folder?')) {
       setFolders(prev => prev.filter(f => f.id !== id));
       setLongPressedFolderId(null);
+      showToast(lang === 'ar' ? 'تم حذف المجلد بنجاح' : 'Folder deleted successfully');
     }
   };
 
@@ -727,6 +730,10 @@ export default function App() {
           readyDate: !rec.isReady ? formattedDate : null
         } : rec
       );
+      const target = updated.find(r => r.id === id);
+      if (target) {
+        showToast(target.isReady ? (lang === 'ar' ? 'تم تجهيز البطاقة' : 'Card marked ready') : (lang === 'ar' ? 'البطاقة قيد العمل' : 'Card in progress'), 'info');
+      }
       return updated;
     });
   };
@@ -736,6 +743,7 @@ export default function App() {
       const updated = prev.map(p => {
         if (p.id === id) {
           const newQty = Math.max(0, p.quantity - 1);
+          Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
           addActivity(
             t.activity_withdraw,
             `${t.notificationWithdrawn} ${p.name} (${t.quantity}: ${p.quantity} -> ${newQty})`,
@@ -744,6 +752,7 @@ export default function App() {
           if (newQty < 3 && newQty > 0) {
             addActivity(t.notificationWithdrawLimit, `${p.name} ${t.quantity}: ${newQty}`, 'alert');
           }
+          showToast(lang === 'ar' ? 'تم سحب القطعة بنجاح' : 'Product withdrawn successfully');
           return { ...p, quantity: newQty };
         }
         return p;
@@ -920,12 +929,13 @@ export default function App() {
   const handleAddProduct = (e: FormEvent) => {
     e.preventDefault();
     if (prodName) {
+      const targetBrand = prodBrand || selectedFolder || "Others";
       const newProduct = {
         id: Date.now(),
         name: prodName,
         quantity: parseInt(prodQty) || 0,
         loc: prodLoc,
-        brand: prodBrand || "Others",
+        brand: targetBrand,
         category: prodCategory || (selectedCategory && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) ? selectedCategory : "screens"),
         price: prodPrice,
         image: prodImage,
@@ -1148,6 +1158,29 @@ export default function App() {
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-rose-900/30 rounded-full blur-[120px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-maroon-900/20 rounded-full blur-[100px]" />
       </div>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast.show && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 50, x: '-50%' }}
+            className={`fixed bottom-24 left-1/2 z-[9999] glass px-6 py-3 rounded-full border shadow-2xl flex items-center gap-3 min-w-[200px] justify-center ${
+              toast.type === 'success' ? 'border-emerald-500/30 text-emerald-400' :
+              toast.type === 'error' ? 'border-rose-500/30 text-rose-400' :
+              'border-blue-500/30 text-blue-400'
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full animate-pulse ${
+              toast.type === 'success' ? 'bg-emerald-500' :
+              toast.type === 'error' ? 'bg-rose-500' :
+              'bg-blue-500'
+            }`} />
+            <span className="font-bold text-xs uppercase tracking-widest">{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="max-w-6xl mx-auto">
         {/* Header */}
@@ -1477,44 +1510,74 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-4"
             >
-              <div className="flex items-center justify-between">
-                <button 
-                  onClick={() => {
-                    if (selectedFolder) {
-                      setSelectedFolder(null);
-                    } else {
-                      setSelectedCategory(null);
-                    }
-                  }}
-                  className="glass-dark px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-white/5 transition-colors group text-[10px]"
-                >
-                  {lang === 'ar' ? <ChevronLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" /> : <ChevronLeft className="w-3 h-3 rotate-180 group-hover:translate-x-0.5 transition-transform" />}
-                  <span>{selectedFolder ? t.backToFolders : t.backToCategories}</span>
-                </button>
-                <div className={`${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-                  {selectedFolder && (
-                    <h2 className="text-lg font-bold">
-                      {selectedFolder}
-                    </h2>
-                  )}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      if (selectedFolder) {
+                        setSelectedFolder(null);
+                      } else {
+                        setSelectedCategory(null);
+                      }
+                    }}
+                    className="glass px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-rose-500/10 transition-colors group text-[10px] border border-white/5 active:scale-95"
+                  >
+                    {lang === 'ar' ? <ChevronLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" /> : <ChevronLeft className="w-3 h-3 rotate-180 group-hover:translate-x-0.5 transition-transform" />}
+                    <span>{t.backToCategories}</span>
+                  </button>
+                  
+                  <div className="flex items-center gap-1.5 text-maroon-500 text-[10px] opacity-40">
+                    <span>/</span>
+                    <span className="font-medium text-maroon-300">
+                      {CATEGORIES.find(c => c.id === selectedCategory) ? t[CATEGORIES.find(c => c.id === selectedCategory)!.nameKey as keyof typeof t] : selectedCategory}
+                    </span>
+                    {selectedFolder && (
+                      <>
+                        <span>/</span>
+                        <span className="font-bold text-rose-400">{selectedFolder}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
+                {currentUser?.type === 'admin' && (
+                  <div className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
+                    {(() => {
+                      const catProducts = products.filter(p => p.category === selectedCategory && (!selectedFolder || p.brand.toLowerCase() === selectedFolder.toLowerCase()));
+                      const totalQty = catProducts.reduce((acc, p) => acc + p.quantity, 0);
+                      return `${t.totalItems}: ${totalQty}`;
+                    })()}
+                  </div>
+                )}
               </div>
 
-          {/* Sub-Folders View (Generalized for all categories) */}
-          <AnimatePresence>
-            {toast.show && (
-              <motion.div
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 50 }}
-                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9999] glass-dark px-6 py-3 rounded-full border border-blue-500/30 text-blue-400 font-bold shadow-2xl flex items-center gap-2"
-              >
-                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                {toast.message}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Filters / Sorting inside Category */}
+              {selectedCategory && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+                  <div className="relative flex-1 min-w-[150px]">
+                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-maroon-600" />
+                    <input 
+                      type="text" 
+                      value={inventorySearch}
+                      onChange={(e) => setInventorySearch(e.target.value)}
+                      placeholder={t.searchPlaceholder}
+                      className="w-full bg-white/5 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-[10px] outline-none focus:ring-1 focus:ring-rose-500/30 transition-all text-maroon-100"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/5">
+                    {(['name', 'quantity', 'brand'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setSortBy(s)}
+                        className={`px-3 py-1.5 rounded-lg text-[9px] font-bold transition-all ${sortBy === s ? 'bg-rose-600 text-white shadow-lg' : 'text-maroon-500 hover:text-maroon-300'}`}
+                      >
+                        {lang === 'ar' ? (s === 'name' ? 'الاسم' : s === 'quantity' ? 'الكمية' : 'الماركة') : s.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
+          {/* Sub-Folders View (Generalized for all categories) */}
           {selectedCategory && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) && !selectedFolder && (
                 <motion.div 
                   variants={containerVariants}
@@ -1593,18 +1656,7 @@ export default function App() {
                     </motion.div>
                   </div>
 
-                  {/* Fallback: If no folders exist for this category but products do, show them here or show a helpful message */}
-                  {folders.filter(f => f.categoryId === selectedCategory).length === 0 && products.filter(p => p.category === selectedCategory).length > 0 && (
-                    <div className="p-4 glass rounded-xl border border-rose-500/20 text-center">
-                      <p className="text-xs text-maroon-300 mb-2">{lang === 'ar' ? 'هذه الفئة تحتوي على منتجات ولكن لا توجد مجلدات.' : 'This category has products but no folders.'}</p>
-                      <button 
-                        onClick={() => setSelectedFolder("all_items_fallback")}
-                        className="text-[10px] font-bold text-rose-400 underline"
-                      >
-                        {lang === 'ar' ? 'عرض جميع المنتجات في هذه الفئة' : 'View all products in this category'}
-                      </button>
-                    </div>
-                  )}
+                  {/* Unassigned products header handled below in the product list section */}
                 </motion.div>
               )}
 
@@ -1964,31 +2016,21 @@ export default function App() {
                                   {activeForm?.includes("product") ? (prodCategory === "connectors" ? t.trackCount : t.brandType) : t.cost}
                                 </label>
                                 {activeForm?.includes("product") ? (
-                                  prodCategory === "connectors" ? (
+                                  <div className="relative">
                                     <input 
                                       type="text" 
                                       required
                                       value={prodBrand}
                                       onChange={(e) => setProdBrand(e.target.value)}
-                                      placeholder={lang === 'ar' ? "مثال: 20مسار" : "Ex: 20 tracks"}
+                                      placeholder={prodCategory === "connectors" ? (lang === 'ar' ? "مثال: 20مسار" : "Ex: 20 tracks") : t.placeholderBrand}
                                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50"
+                                      list="brand-suggestions"
                                     />
-                                  ) : (
-                                    <select 
-                                      required
-                                      value={prodBrand}
-                                      onChange={(e) => setProdBrand(e.target.value)}
-                                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-rose-500/50 transition-all text-xs text-maroon-50 appearance-none cursor-pointer"
-                                    >
-                                      <option value="" disabled className="bg-maroon-950">...</option>
-                                      {MOBILE_BRANDS.map((brand) => (
-                                        <option key={brand} value={brand} className="bg-maroon-950">
-                                          {brand}
-                                        </option>
-                                      ))}
-                                      <option value="Other" className="bg-maroon-950">{lang === 'ar' ? 'أخرى' : 'Other'}</option>
-                                    </select>
-                                  )
+                                    <datalist id="brand-suggestions">
+                                      {MOBILE_BRANDS.map(brand => <option key={brand} value={brand} />)}
+                                      {Array.from(new Set(folders.map(f => f.name))).map(name => <option key={name} value={name} />)}
+                                    </datalist>
+                                  </div>
                                 ) : (
                                   <input 
                                     type="text" 
@@ -2078,7 +2120,7 @@ export default function App() {
               </AnimatePresence>
 
               {/* Main Content Area (Items or Grid) */}
-              {selectedCategory && (selectedFolder || ["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory)) && (
+              {selectedCategory && (
                 <div className="glass rounded-[2rem] p-4 min-h-[300px] border-dashed border-maroon-800/50">
                   {selectedCategory === "all_inventory" ? (
                     <div className="space-y-6">
@@ -2258,11 +2300,7 @@ export default function App() {
                                           return (
                                             <div 
                                               key={idx} 
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                copyToClipboard(item);
-                                              }}
-                                              className={`flex items-center gap-3 text-sm group/item cursor-pointer active:scale-95 transition-transform ${isHighlighted ? 'text-blue-300' : 'text-maroon-100'}`}
+                                              className={`flex items-center gap-3 text-sm group/item ${isHighlighted ? 'text-blue-300' : 'text-maroon-100'}`}
                                             >
                                               <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold border transition-all ${isHighlighted ? 'bg-blue-500 text-white border-blue-400' : 'bg-white/5 text-blue-400 border-white/5 group-hover/item:bg-blue-500 group-hover/item:text-white'}`}>
                                                 {idx + 1}
@@ -2435,6 +2473,14 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="space-y-6">
+                      {!selectedFolder && !["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory) && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="h-2 w-1 bg-maroon-600 rounded-full" />
+                          <h2 className="text-[10px] font-bold text-maroon-300 uppercase tracking-widest">
+                            {lang === 'ar' ? 'منتجات إضافية (بدون مجلد)' : 'Additional Items (Unassigned)'}
+                          </h2>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 gap-3">
                         {(() => {
                           const displayed = products
@@ -2443,9 +2489,17 @@ export default function App() {
                               
                               if (selectedFolder === "all_items_fallback") return true;
 
+                              const isSpecialCategory = ["all_inventory", "maintenance", "prices", "compatibility"].includes(selectedCategory);
+
                               if (selectedFolder) {
                                 const pBrand = (p.brand || "").toLowerCase();
                                 if (pBrand !== selectedFolder.toLowerCase()) return false;
+                              } else if (!isSpecialCategory) {
+                                // NO FOLDER SELECTED in standard category: Show ONLY UNASSIGNED products
+                                const currentCategoryFolders = folders.filter(f => f.categoryId === selectedCategory);
+                                const folderNames = currentCategoryFolders.map(f => f.name.toLowerCase());
+                                const pBrand = (p.brand || "").toLowerCase();
+                                if (folderNames.includes(pBrand)) return false;
                               }
                               
                               const term = (searchQuery || inventorySearch).toLowerCase();
@@ -2478,14 +2532,9 @@ export default function App() {
                                   <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <div 
-                                className="flex items-center gap-1 text-[11px] font-bold cursor-pointer hover:text-blue-400 group/copy transition-all bg-white/5 px-2 py-0.5 rounded-md border border-white/5 active:bg-blue-500/20"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyToClipboard(product.name);
-                                }}
+                                className="flex items-center gap-1 text-[11px] font-bold transition-all bg-white/5 px-2 py-0.5 rounded-md border border-white/5"
                               >
                                 {product.name}
-                                <Copy size={8} className="opacity-0 group-hover/copy:opacity-100 transition-opacity text-blue-400" />
                               </div>
                               {product.quantity < 3 && (
                                 <span className="text-[7px] bg-amber-500/10 text-amber-500 px-1 py-0.5 rounded border border-amber-500/20">
@@ -2494,27 +2543,17 @@ export default function App() {
                               )}
                               {product.price && (
                                 <div 
-                                  className="flex items-center gap-1 text-[9px] text-emerald-400 font-bold bg-emerald-500/5 px-1.5 py-0.5 rounded ml-1 cursor-pointer hover:bg-emerald-500/20 group/copy transition-all border border-emerald-500/10"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    copyToClipboard(`${product.price}`);
-                                  }}
+                                  className="flex items-center gap-1 text-[9px] text-emerald-400 font-bold bg-emerald-500/5 px-1.5 py-0.5 rounded ml-1 transition-all border border-emerald-500/10"
                                 >
                                   {product.price} {t.iqd}
-                                  <Copy size={7} className="opacity-0 group-hover/copy:opacity-100 transition-opacity" />
                                 </div>
                               )}
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <div 
-                                className="flex items-center gap-1 text-[9px] text-maroon-400 cursor-pointer hover:text-blue-300 group/copy transition-all bg-white/5 px-1.5 rounded"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyToClipboard(`${product.brand} - ${product.loc}`);
-                                }}
+                                className="flex items-center gap-1 text-[9px] text-maroon-400 transition-all bg-white/5 px-1.5 rounded"
                               >
                                 {product.brand} - {t.location}: {product.loc}
-                                <Copy size={7} className="opacity-0 group-hover/copy:opacity-100 transition-opacity text-blue-300" />
                               </div>
                                       {product.image && (
                                         <a href={product.image} target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:underline flex items-center gap-0.5">
@@ -2557,7 +2596,9 @@ export default function App() {
                                       whileHover={{ scale: 1.05 }}
                                       whileTap={{ scale: 0.95 }}
                                       disabled={product.quantity <= 0}
-                                      onClick={() => withdrawProduct(product.id)}
+                                      onClick={() => {
+                                        withdrawProduct(product.id);
+                                      }}
                                       className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
                                         product.quantity > 0 
                                         ? 'bg-rose-600/10 text-rose-400 hover:bg-rose-600 hover:text-white ring-px ring-rose-500/20' 
@@ -2568,7 +2609,12 @@ export default function App() {
                                       {t.withdrawPiece}
                                     </motion.button>
                                     <button 
-                                      onClick={() => deleteProduct(product.id)}
+                                      onClick={() => {
+                                        if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
+                                          deleteProduct(product.id);
+                                          showToast(lang === 'ar' ? 'تم حذف القطعة' : 'Product deleted', 'error');
+                                        }
+                                      }}
                                       className="p-1 text-maroon-700 hover:text-rose-500 transition-colors"
                                     >
                                       <X size={12} />
