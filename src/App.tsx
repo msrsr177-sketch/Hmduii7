@@ -61,7 +61,7 @@ type Language = 'ar' | 'en';
 
 const translations = {
   ar: {
-    title: "نيو فون",
+    title: "فـون فيِكس",
     searchPlaceholder: "ابحث عن قطعة (شاشة، فلات، كونكتر)...",
     totalItems: "إجمالي القطع",
     itemTypes: "أنواع القطع",
