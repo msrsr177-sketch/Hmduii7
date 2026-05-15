@@ -1,0 +1,54 @@
+Name: Build Flutter Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: 
+
+jobs:
+  build:
+    name: Build Flutter APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. إعداد الجافا (مهم جداً لأندرويد وفلاتر)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # فلاتر حالياً يفضل 17 أو 21 لبيئة الأندرويد
+
+      # 2. إعداد فلاتر (Flutter SDK)
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x' # سيجلب أحدث نسخة مستقرة من 3
+          channel: 'stable'
+          cache: true # لتسريع البناء في المرات القادمة
+
+      # 3. تحميل المكتبات (Dependencies)
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 4. تنظيف المشروع وبناء الملفات المولدة (مثل ملفات الفايربيس إذا كنت تستخدم build_runner)
+      - name: Clean & Code Gen (Optional)
+        run: |
+          flutter clean
+          # إذا عندك ملفات تحتاج توليد (مثل Freezed أو JsonSerializable) فعل السطر التالي:
+          # flutter pub run build_runner build --delete-conflicting-outputs
+
+      # 5. بناء الـ APK
+      # ملاحظة: استخدمت --debug بناءً على طلبك السابق، لكن للفايربيس والإنتاج يفضل --release
+      - name: Build Android APK
+        run: flutter build apk --debug --target-platform android-arm64
+
+      # 6. رفع ملف الـ APK كـ Artifact
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flutter-App-Build-${{ github.run_number }}
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
