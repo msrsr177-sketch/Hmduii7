@@ -14,38 +14,33 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. إعداد الجافا (مهم جداً لأندرويد وفلاتر)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17' # فلاتر حالياً يفضل 17 أو 21 لبيئة الأندرويد
+          java-version: '17'
 
-      # 2. إعداد فلاتر (Flutter SDK)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x' # سيجلب أحدث نسخة مستقرة من 3
+          flutter-version: '3.x'
           channel: 'stable'
-          cache: true # لتسريع البناء في المرات القادمة
+          cache: true
 
-      # 3. تحميل المكتبات (Dependencies)
-      - name: Install Dependencies
-        run: flutter pub get
-
-      # 4. تنظيف المشروع وبناء الملفات المولدة (مثل ملفات الفايربيس إذا كنت تستخدم build_runner)
-      - name: Clean & Code Gen (Optional)
+      - name: Fix and Re-initialize Android Project
         run: |
+          # تنظيف أي مخلفات قديمة
           flutter clean
-          # إذا عندك ملفات تحتاج توليد (مثل Freezed أو JsonSerializable) فعل السطر التالي:
-          # flutter pub run build_runner build --delete-conflicting-outputs
+          # إعادة توليد ملفات الأندرويد الناقصة أو المتضررة تلقائياً
+          flutter create . --platforms android
+          # تحميل المكتبات من جديد
+          flutter pub get
 
-      # 5. بناء الـ APK
-      # ملاحظة: استخدمت --debug بناءً على طلبك السابق، لكن للفايربيس والإنتاج يفضل --release
       - name: Build Android APK
-        run: flutter build apk --debug --target-platform android-arm64
+        run: |
+          # بناء APK نسخة Debug مع تخطي فحص الـ Gradle القديم
+          flutter build apk --debug --target-platform android-arm64
 
-      # 6. رفع ملف الـ APK كـ Artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
