@@ -29,16 +29,18 @@ jobs:
 
       - name: Fix and Re-initialize Android Project
         run: |
-          # تنظيف أي مخلفات قديمة
-          flutter clean
-          # إعادة توليد ملفات الأندرويد الناقصة أو المتضررة تلقائياً
           flutter create . --platforms android
-          # تحميل المكتبات من جديد
           flutter pub get
+
+      - name: Auto-Fix Dart Code (Colors)
+        run: |
+          # هذا الأمر يبحث بملف main.dart ويبدل الألوان اللي تسبب خطأ
+          sed -i 's/Colors.roseAccent/Colors.pinkAccent/g' lib/main.dart
+          sed -i 's/Colors.rose/Colors.pink/g' lib/main.dart
+          sed -i 's/Colors.emeraldAccent/Colors.tealAccent/g' lib/main.dart
 
       - name: Build Android APK
         run: |
-          # بناء APK نسخة Debug مع تخطي فحص الـ Gradle القديم
           flutter build apk --debug --target-platform android-arm64
 
       - name: Upload APK Artifact
