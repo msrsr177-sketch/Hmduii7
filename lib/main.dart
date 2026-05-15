@@ -255,6 +255,15 @@ class AppProvider with ChangeNotifier {
 // MAIN ENTRY POINT
 // =============================================================================
 
+/*
+  NOTE FOR FIREBASE SETUP IN FLUTTER:
+  1. Add cloud_firestore, firebase_auth, and firebase_core to your pubspec.yaml.
+  2. Run 'flutterfire configure' to link with your Firebase project.
+  3. Initialize Firebase in main():
+     WidgetsFlutterBinding.ensureInitialized();
+     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+*/
+
 void main() {
   runApp(
     ChangeNotifierProvider(
