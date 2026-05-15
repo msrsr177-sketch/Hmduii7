@@ -27,25 +27,40 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Fix and Re-initialize Android Project
+      - name: Fix and Re-initialize Project
         run: |
+          # تنظيف المشروع
+          flutter clean
+          
+          # إضافة المكتبات التي ظهر فيها نقص (تلقائياً)
+          flutter pub add shared_preferences
+          flutter pub add firebase_core
+          
+          # إعادة بناء ملفات الأندرويد والـ Gradle لتجنب "Unsupported Gradle"
           flutter create . --platforms android
+          
+          # تحميل كافة المكتبات المسجلة
           flutter pub get
 
       - name: Auto-Fix Dart Code (Colors)
         run: |
-          # هذا الأمر يبحث بملف main.dart ويبدل الألوان اللي تسبب خطأ
-          sed -i 's/Colors.roseAccent/Colors.pinkAccent/g' lib/main.dart
-          sed -i 's/Colors.rose/Colors.pink/g' lib/main.dart
-          sed -i 's/Colors.emeraldAccent/Colors.tealAccent/g' lib/main.dart
+          # استبدال الألوان غير المعرفة بألوان قياسية داخل ملف الـ main.dart
+          if [ -f lib/main.dart ]; then
+            sed -i 's/Colors.roseAccent/Colors.pinkAccent/g' lib/main.dart
+            sed -i 's/Colors.rose/Colors.pink/g' lib/main.dart
+            sed -i 's/Colors.emeraldAccent/Colors.tealAccent/g' lib/main.dart
+            echo "Dart colors fixed!"
+          fi
 
       - name: Build Android APK
         run: |
+          # بناء التطبيق بصيغة APK (نسخة Debug)
+          # ملاحظة: تأكد من وجود ملف google-services.json في android/app/ لنجاح هذه الخطوة
           flutter build apk --debug --target-platform android-arm64
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Flutter-App-Build-${{ github.run_number }}
+          name: New-Phone-App-Build-${{ github.run_number }}
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
