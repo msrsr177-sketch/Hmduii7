@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "314081651799",
+    "project_id": "studio-152290564-65b81",
+    "storage_bucket": "studio-152290564-65b81.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:314081651799:android:23b632e990656095694712",
+        "android_client_info": {
+          "package_name": "com.hammad.wallet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "314081651799-e0jpqec0mcanokdo4fc4p58c06l9ggi8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9czs8YHIKfytvXLeuF12_vkC3u5PR6Ic"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "314081651799-e0jpqec0mcanokdo4fc4p58c06l9ggi8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:314081651799:android:14da59dfab1e7fb8694712",
+        "android_client_info": {
+          "package_name": "com.msrsr.ai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "314081651799-e0jpqec0mcanokdo4fc4p58c06l9ggi8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9czs8YHIKfytvXLeuF12_vkC3u5PR6Ic"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "314081651799-e0jpqec0mcanokdo4fc4p58c06l9ggi8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
