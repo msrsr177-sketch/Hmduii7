@@ -52,6 +52,31 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { 
+  auth, 
+  db, 
+  signInWithGoogle, 
+  logOut, 
+  OperationType, 
+  handleFirestoreError 
+} from './firebase';
+import { 
+  onAuthStateChanged, 
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc, 
+  query, 
+  where,
+  getDoc,
+  serverTimestamp
+} from 'firebase/firestore';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -61,7 +86,7 @@ type Language = 'ar' | 'en';
 
 const translations = {
   ar: {
-    title: "فـون فيِكس",
+    title: "نيو فون",
     searchPlaceholder: "ابحث عن قطعة (شاشة، فلات، كونكتر)...",
     totalItems: "إجمالي القطع",
     itemTypes: "أنواع القطع",
@@ -176,6 +201,8 @@ const translations = {
     productPrice: "سعر القطعة",
     productImage: "رابط الصورة (اختياري)",
     viewImage: "عرض الصورة",
+    loginPopupError: "فشل فتح النافذة المنبثقة. يرجى التأكد من السماح بالفتحات المنبثقة في متصفحك أو افتح التطبيق في نافذة جديدة.",
+    loginPopupClosed: "تم إغلاق نافذة تسجيل الدخول قبل اكتمال العملية.",
   },
   en: {
     title: "New Phone",
@@ -293,6 +320,8 @@ const translations = {
     productPrice: "Product Price",
     productImage: "Image URL (Optional)",
     viewImage: "View Image",
+    loginPopupError: "Failed to open popup. Please ensure you allow popups in your browser or open the app in a new tab.",
+    loginPopupClosed: "Login window was closed before completion.",
   }
 };
 
@@ -328,6 +357,33 @@ export default function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Firebase Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setIsLoggedIn(true);
+        // Check admin status
+        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+        const adminData = adminDoc.exists();
+        setIsAdmin(adminData);
+        
+        setCurrentUser({
+          uid: user.uid,
+          name: user.displayName || 'User',
+          email: user.email,
+          avatar: user.photoURL,
+          type: adminData ? 'admin' : 'google'
+        });
+      } else {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+        setIsAdmin(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const [activities, setActivities] = useState<any[]>([]);
   const [hasUnread, setHasUnread] = useState(false);
@@ -337,6 +393,59 @@ export default function App() {
   const [products, setProducts] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+  // Firebase Real-time listeners
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProducts(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'products'));
+
+    const unsubFolders = onSnapshot(collection(db, 'folders'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setFolders(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'folders'));
+
+    const unsubMaintenance = onSnapshot(collection(db, 'maintenance_records'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMaintenanceRecords(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'maintenance_records'));
+
+    const unsubActivities = onSnapshot(collection(db, 'activities'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setActivities(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'activities'));
+
+    const unsubPrices = onSnapshot(collection(db, 'price_records'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPriceRecords(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'price_records'));
+
+    const unsubComp = onSnapshot(collection(db, 'compatibility_records'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCompatibilityRecords(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'compatibility_records'));
+
+    const unsubStats = onSnapshot(doc(db, 'stats', 'counters'), (snapshot) => {
+      if (snapshot.exists()) {
+        setWithdrawalCount(snapshot.data().withdrawalCount || 0);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'stats/counters'));
+
+    setIsDataLoaded(true);
+
+    return () => {
+      unsubProducts();
+      unsubFolders();
+      unsubMaintenance();
+      unsubActivities();
+      unsubPrices();
+      unsubComp();
+      unsubStats();
+    };
+  }, [isLoggedIn]);
 
   // Data Migration for Category IDs
   useEffect(() => {
@@ -353,14 +462,13 @@ export default function App() {
     }
   }, [products.length, isDataLoaded]);
 
-  // Initialize folders
+  // Initialize folders and language
   useEffect(() => {
-    const initFolders = async () => {
-      const { value: f } = await Preferences.get({ key: 'folders' });
-      let currentFolders = f ? JSON.parse(f) : [];
-      setFolders(currentFolders);
+    const initData = async () => {
+      const { value: l } = await Preferences.get({ key: 'lang' });
+      if (l) setLang(l as Language);
     };
-    initFolders();
+    initData();
 
     // Request Notification Permissions
     const requestPerms = async () => {
@@ -388,6 +496,8 @@ export default function App() {
   const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'brand'>('name');
+
+  const isIframe = window.self !== window.top;
 
   // Scroll to top on navigation
   useEffect(() => {
@@ -455,13 +565,17 @@ export default function App() {
     }
   };
 
-  const handleDeleteFolder = (id: string, e: React.MouseEvent | React.TouchEvent) => {
+  const handleDeleteFolder = async (id: string, e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا المجلد؟' : 'Are you sure you want to delete this folder?')) {
-      setFolders(prev => prev.filter(f => f.id !== id));
-      setLongPressedFolderId(null);
-      showToast(lang === 'ar' ? 'تم حذف المجلد بنجاح' : 'Folder deleted successfully');
+      try {
+        await deleteDoc(doc(db, 'folders', id));
+        setLongPressedFolderId(null);
+        showToast(lang === 'ar' ? 'تم حذف المجلد بنجاح' : 'Folder deleted successfully');
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `folders/${id}`);
+      }
     }
   };
 
@@ -525,24 +639,11 @@ export default function App() {
     initData();
   }, []);
 
-  // Save data to Capacitor Preferences
-  useEffect(() => { if (isDataLoaded) saveData('products', products); }, [products, isDataLoaded]);
-  useEffect(() => { if (isDataLoaded) saveData('folders', folders); }, [folders, isDataLoaded]);
-  useEffect(() => { if (isDataLoaded) saveData('maintenance_records', maintenanceRecords); }, [maintenanceRecords, isDataLoaded]);
-  useEffect(() => { if (isDataLoaded) Preferences.set({ key: 'withdrawal_count', value: withdrawalCount.toString() }); }, [withdrawalCount, isDataLoaded]);
+  // Remove redundant local persistence effects
   useEffect(() => { if (isDataLoaded) Preferences.set({ key: 'lang', value: lang }); }, [lang, isDataLoaded]);
-  useEffect(() => { if (isDataLoaded) saveData('activities', activities); }, [activities, isDataLoaded]);
-  useEffect(() => { if (isDataLoaded) saveData('priceRecords', priceRecords); }, [priceRecords, isDataLoaded]);
-  useEffect(() => { if (isDataLoaded) saveData('compatibilityRecords', compatibilityRecords); }, [compatibilityRecords, isDataLoaded]);
-  useEffect(() => { 
-    if (isDataLoaded) {
-      Preferences.set({ key: 'isLoggedIn', value: isLoggedIn.toString() });
-      if (currentUser) Preferences.set({ key: 'user', value: JSON.stringify(currentUser) });
-    }
-  }, [isLoggedIn, currentUser, isDataLoaded]);
 
   const saveData = async (key: string, data: any) => {
-    await Preferences.set({ key, value: JSON.stringify(data) });
+    // No-op, using Firebase
   };
 
   // Navigation handling for mobile back button
@@ -646,53 +747,47 @@ export default function App() {
     }
   };
 
-  const saveMaintenanceRecord = () => {
+  const saveMaintenanceRecord = async () => {
     if (!custName.trim()) return null;
     
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     
-    let finalRecord: any;
-
-    if (activeForm === "customer-edit" || activeForm === "edit_customer") {
-      finalRecord = {
-        id: editingId,
-        customerName: custName,
-        deviceType: custDevice,
-        issue: custIssue,
-        cost: custCost,
-        // Preserve unedited fields if needed or refetch from state
-      };
-      
-      setMaintenanceRecords(prev => {
-        const updated = prev.map(r => 
-          r.id === editingId ? { ...r, ...finalRecord } : r
+    try {
+      if (activeForm === "customer-edit" || activeForm === "edit_customer") {
+        if (!editingId) return null;
+        const ref = doc(db, 'maintenance_records', editingId.toString());
+        await updateDoc(ref, {
+          customerName: custName,
+          deviceType: custDevice,
+          issue: custIssue,
+          cost: custCost,
+        });
+        const updated = await getDoc(ref);
+        return { id: editingId, ...updated.data() };
+      } else {
+        const id = Date.now();
+        const record = {
+          customerName: custName,
+          deviceType: custDevice,
+          issue: custIssue,
+          cost: custCost,
+          isReady: false,
+          entryDate: formattedDate,
+          readyDate: null
+        };
+        await setDoc(doc(db, 'maintenance_records', id.toString()), record);
+        addActivity(
+          lang === 'ar' ? 'إضافة بطاقة صيانة' : 'Add Maintenance Card',
+          `${lang === 'ar' ? 'تمت إضافة بطاقة لـ' : 'Added card for'} ${custName} (${custDevice})`,
+          'add'
         );
-        return updated;
-      });
-      
-      // Get the full record for printing (after merging)
-      const existing = maintenanceRecords.find(r => r.id === editingId);
-      finalRecord = { ...existing, ...finalRecord };
-    } else {
-      finalRecord = {
-        id: Date.now(),
-        customerName: custName,
-        deviceType: custDevice,
-        issue: custIssue,
-        cost: custCost,
-        isReady: false,
-        entryDate: formattedDate,
-        readyDate: null
-      };
-      setMaintenanceRecords(prev => [finalRecord, ...prev]);
-      addActivity(
-        lang === 'ar' ? 'إضافة بطاقة صيانة' : 'Add Maintenance Card',
-        `${lang === 'ar' ? 'تمت إضافة بطاقة لـ' : 'Added card for'} ${finalRecord.customerName} (${finalRecord.deviceType})`,
-        'add'
-      );
+        return { id, ...record };
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'maintenance_records');
+      return null;
     }
-    return finalRecord;
   };
 
   const handleAddAndPrint = async (e: FormEvent) => {
@@ -705,81 +800,103 @@ export default function App() {
   };
 
 
-  const addActivity = (title: string, desc: string, type: 'add' | 'withdraw' | 'alert') => {
+  const addActivity = async (title: string, desc: string, type: 'add' | 'withdraw' | 'alert') => {
+    const id = Date.now();
     const newActivity = {
-      id: Date.now(),
       title,
       desc,
       type,
       time: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-IQ' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
       date: new Date().toLocaleDateString(lang === 'ar' ? 'ar-IQ' : 'en-US')
     };
-    setActivities(prev => [newActivity, ...prev].slice(0, 50));
-    setHasUnread(true);
-  };
-
-  const toggleReady = (id: number) => {
-    const now = new Date();
-    const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    setMaintenanceRecords(prev => {
-      const updated = prev.map(rec => 
-        rec.id === id ? { 
-          ...rec, 
-          isReady: !rec.isReady,
-          readyDate: !rec.isReady ? formattedDate : null
-        } : rec
-      );
-      const target = updated.find(r => r.id === id);
-      if (target) {
-        showToast(target.isReady ? (lang === 'ar' ? 'تم تجهيز البطاقة' : 'Card marked ready') : (lang === 'ar' ? 'البطاقة قيد العمل' : 'Card in progress'), 'info');
-      }
-      return updated;
-    });
-  };
-
-  const withdrawProduct = (id: number) => {
-    setProducts(prev => {
-      const updated = prev.map(p => {
-        if (p.id === id) {
-          const newQty = Math.max(0, p.quantity - 1);
-          Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
-          addActivity(
-            t.activity_withdraw,
-            `${t.notificationWithdrawn} ${p.name} (${t.quantity}: ${p.quantity} -> ${newQty})`,
-            'withdraw'
-          );
-          if (newQty < 3 && newQty > 0) {
-            addActivity(t.notificationWithdrawLimit, `${p.name} ${t.quantity}: ${newQty}`, 'alert');
-          }
-          showToast(lang === 'ar' ? 'تم سحب القطعة بنجاح' : 'Product withdrawn successfully');
-          return { ...p, quantity: newQty };
-        }
-        return p;
-      });
-      return updated;
-    });
-    setWithdrawalCount(prev => prev + 1);
-  };
-
-  const incrementProduct = (id: number) => {
-    setProducts(prev => {
-      const updated = prev.map(p => 
-        p.id === id ? { ...p, quantity: p.quantity + 1 } : p
-      );
-      return updated;
-    });
-  };
-
-  const deleteProduct = (id: number) => {
-    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
-      setProducts(prev => prev.filter(p => p.id !== id));
+    try {
+      await setDoc(doc(db, 'activities', id.toString()), newActivity);
+      setHasUnread(true);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'activities');
     }
   };
 
-  const deleteRecord = (id: number) => {
+  const toggleReady = async (id: number | string) => {
+    const now = new Date();
+    const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const rec = maintenanceRecords.find(r => r.id === id);
+    if (!rec) return;
+
+    try {
+      const isReady = !rec.isReady;
+      await updateDoc(doc(db, 'maintenance_records', id.toString()), {
+        isReady,
+        readyDate: isReady ? formattedDate : null
+      });
+      showToast(isReady ? (lang === 'ar' ? 'تم تجهيز البطاقة' : 'Card marked ready') : (lang === 'ar' ? 'البطاقة قيد العمل' : 'Card in progress'), 'info');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `maintenance_records/${id}`);
+    }
+  };
+
+  const withdrawProduct = async (id: number | string) => {
+    const p = products.find(prod => prod.id === id);
+    if (!p) return;
+
+    const newQty = Math.max(0, p.quantity - 1);
+    try {
+      await updateDoc(doc(db, 'products', id.toString()), {
+        quantity: newQty
+      });
+      
+      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
+      addActivity(
+        t.activity_withdraw,
+        `${t.notificationWithdrawn} ${p.name} (${t.quantity}: ${p.quantity} -> ${newQty})`,
+        'withdraw'
+      );
+      if (newQty < 3 && newQty > 0) {
+        addActivity(t.notificationWithdrawLimit, `${p.name} ${t.quantity}: ${newQty}`, 'alert');
+      }
+      showToast(lang === 'ar' ? 'تم سحب القطعة بنجاح' : 'Product withdrawn successfully');
+      
+      // Update global withdrawal count
+      const statsRef = doc(db, 'stats', 'counters');
+      const statsSnap = await getDoc(statsRef);
+      const currentCount = statsSnap.exists() ? (statsSnap.data().withdrawalCount || 0) : 0;
+      await setDoc(statsRef, { withdrawalCount: currentCount + 1 }, { merge: true });
+      
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `products/${id}`);
+    }
+  };
+
+  const incrementProduct = async (id: number | string) => {
+    const p = products.find(prod => prod.id === id);
+    if (!p) return;
+    try {
+      await updateDoc(doc(db, 'products', id.toString()), {
+        quantity: p.quantity + 1
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `products/${id}`);
+    }
+  };
+
+  const deleteProduct = async (id: number | string) => {
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القطعة؟' : 'Are you sure you want to delete this piece?')) {
+      try {
+        await deleteDoc(doc(db, 'products', id.toString()));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
+      }
+    }
+  };
+
+  const deleteRecord = async (id: number | string) => {
     if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه البطاقة؟' : 'Are you sure you want to delete this card?')) {
-      setMaintenanceRecords(prev => prev.filter(r => r.id !== id));
+      try {
+        await deleteDoc(doc(db, 'maintenance_records', id.toString()));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `maintenance_records/${id}`);
+      }
     }
   };
 
@@ -830,55 +947,71 @@ export default function App() {
     setCompDevicesList("");
   };
 
-  const handleAddCompatibility = (e: FormEvent) => {
+  const handleAddCompatibility = async (e: FormEvent) => {
     e.preventDefault();
     if (!compDeviceName.trim() || !compDevicesList.trim()) return;
 
+    const id = Date.now();
     const newRecord = {
-      id: Date.now(),
       deviceName: compDeviceName,
       brand: prodBrand || selectedFolder || "Others",
       compatibleItems: compDevicesList.split('\n').filter(i => i.trim() !== ""),
     };
 
-    setCompatibilityRecords(prev => [newRecord, ...prev]);
-    addActivity(
-      lang === 'ar' ? 'إضافة توافق' : 'Add Compatibility',
-      `${compDeviceName}`,
-      'add'
-    );
-    closeModals();
-  };
-
-  const deleteCompatibility = (id: number) => {
-    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
-      setCompatibilityRecords(prev => prev.filter(p => p.id !== id));
+    try {
+      await setDoc(doc(db, 'compatibility_records', id.toString()), newRecord);
+      addActivity(
+        lang === 'ar' ? 'إضافة توافق' : 'Add Compatibility',
+        `${compDeviceName}`,
+        'add'
+      );
+      closeModals();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'compatibility_records');
     }
   };
 
-  const handleAddPrice = (e: FormEvent) => {
+  const deleteCompatibility = async (id: number | string) => {
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) {
+      try {
+        await deleteDoc(doc(db, 'compatibility_records', id.toString()));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `compatibility_records/${id}`);
+      }
+    }
+  };
+
+  const handleAddPrice = async (e: FormEvent) => {
     e.preventDefault();
     if (!priceAmount.trim() || !pricePartName.trim()) return;
 
+    const id = Date.now();
     const newRecord = {
-      id: Date.now(),
       name: pricePartName,
       category: pricePartCategory || "screens",
       price: priceAmount,
     };
 
-    setPriceRecords(prev => [newRecord, ...prev]);
-    addActivity(
-      lang === 'ar' ? 'إضافة سعر' : 'Add Price',
-      `${pricePartName} - ${priceAmount} ${t.iqd}`,
-      'add'
-    );
-    closeModals();
+    try {
+      await setDoc(doc(db, 'price_records', id.toString()), newRecord);
+      addActivity(
+        lang === 'ar' ? 'إضافة سعر' : 'Add Price',
+        `${pricePartName} - ${priceAmount} ${t.iqd}`,
+        'add'
+      );
+      closeModals();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'price_records');
+    }
   };
 
-  const deletePrice = (id: number) => {
+  const deletePrice = async (id: number | string) => {
     if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا السعر؟' : 'Are you sure you want to delete this price?')) {
-      setPriceRecords(prev => prev.filter(p => p.id !== id));
+      try {
+        await deleteDoc(doc(db, 'price_records', id.toString()));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `price_records/${id}`);
+      }
     }
   };
 
@@ -901,37 +1034,38 @@ export default function App() {
     setActiveForm("edit_customer");
   };
 
-  const handleEditProduct = (e: FormEvent) => {
+  const handleEditProduct = async (e: FormEvent) => {
     e.preventDefault();
     if (editingId && prodName) {
-      setProducts(prev => prev.map(p => 
-        p.id === editingId ? {
-          ...p,
+      try {
+        await updateDoc(doc(db, 'products', editingId.toString()), {
           name: prodName,
           quantity: parseInt(prodQty) || 0,
           loc: prodLoc,
           brand: prodBrand,
-          category: prodCategory || p.category || "screens",
+          category: prodCategory || "screens",
           price: prodPrice,
           image: prodImage
-        } : p
-      ));
-      closeModals();
+        });
+        closeModals();
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `products/${editingId}`);
+      }
     }
   };
 
-  const handleEditCustomer = (e: FormEvent) => {
+  const handleEditCustomer = async (e: FormEvent) => {
     e.preventDefault();
-    saveMaintenanceRecord();
+    await saveMaintenanceRecord();
     closeModals();
   };
 
-  const handleAddProduct = (e: FormEvent) => {
+  const handleAddProduct = async (e: FormEvent) => {
     e.preventDefault();
     if (prodName) {
+      const id = Date.now();
       const targetBrand = prodBrand || selectedFolder || "Others";
       const newProduct = {
-        id: Date.now(),
         name: prodName,
         quantity: parseInt(prodQty) || 0,
         loc: prodLoc,
@@ -941,33 +1075,41 @@ export default function App() {
         image: prodImage,
         createdAt: new Date().toLocaleDateString()
       };
-      setProducts(prev => [newProduct, ...prev]);
       
-      addActivity(
-        t.activity_add,
-        `${t.notificationAdded} ${newProduct.name} (${t.quantity}: ${newProduct.quantity})`,
-        'add'
-      );
-      closeModals();
+      try {
+        await setDoc(doc(db, 'products', id.toString()), newProduct);
+        addActivity(
+          t.activity_add,
+          `${t.notificationAdded} ${prodName} (${t.quantity}: ${prodQty})`,
+          'add'
+        );
+        closeModals();
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, 'products');
+      }
     }
   };
 
-  const handleAddFolder = (e: FormEvent) => {
+  const handleAddFolder = async (e: FormEvent) => {
     e.preventDefault();
     if (!folderName.trim()) return;
+    const id = `${selectedCategory || "screens"}-${folderName.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
     const newFolder = {
-      id: `${selectedCategory || "screens"}-${folderName.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`,
       name: folderName,
       categoryId: selectedCategory || "screens",
       count: 0
     };
-    setFolders(prev => [...prev, newFolder]);
-    closeModals();
+    try {
+      await setDoc(doc(db, 'folders', id), newFolder);
+      closeModals();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'folders');
+    }
   };
 
-  const handleAddCustomer = (e: FormEvent) => {
+  const handleAddCustomer = async (e: FormEvent) => {
     e.preventDefault();
-    saveMaintenanceRecord();
+    await saveMaintenanceRecord();
     closeModals();
   };
 
@@ -976,10 +1118,12 @@ export default function App() {
       if (secretCode === "1902") {
         setIsLoggedIn(true);
         setCurrentUser({
+          uid: 'admin-guest',
           name: 'Admin',
           type: 'admin',
           avatar: 'https://ui-avatars.com/api/?name=Admin&background=F43F5E&color=fff'
         });
+        setIsAdmin(true);
         setIsAdminCodeOpen(false);
         setSecretCode("");
         setCodeError(false);
@@ -990,12 +1134,27 @@ export default function App() {
       return;
     }
 
+    if (method === 'google') {
+      signInWithGoogle().catch((err: any) => {
+        if (err.code === 'auth/popup-closed-by-user') {
+          showToast(t.loginPopupClosed as string, 'error');
+        } else if (err.code === 'auth/popup-blocked') {
+          showToast(t.loginPopupError as string, 'error');
+        } else {
+          showToast(lang === 'ar' ? 'حدث خطأ أثناء تسجيل الدخول' : 'Error during login', 'error');
+        }
+      });
+      return;
+    }
+
     setIsLoggedIn(true);
     setCurrentUser({
-      name: method === 'google' ? 'Hamad' : 'Guest User',
-      type: method,
-      avatar: method === 'google' ? 'https://ui-avatars.com/api/?name=Hamad&background=F43F5E&color=fff' : null
+      uid: 'guest-' + Date.now(),
+      name: 'Guest User',
+      type: 'guest',
+      avatar: null
     });
+    setIsAdmin(false);
   };
 
   if (!isLoggedIn) {
@@ -1029,6 +1188,26 @@ export default function App() {
               </div>
 
           <div className="space-y-4">
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleLogin('google')}
+              className="w-full glass-dark py-4 rounded-2xl flex items-center justify-between px-6 hover:bg-white/10 transition-all group overflow-hidden relative border border-white/5"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center group-hover:bg-rose-500/20 group-hover:text-rose-400 transition-all">
+                  <Zap className="w-5 h-5 text-rose-500" />
+                </div>
+                <div className={`text-${lang === 'ar' ? 'right' : 'left'}`}>
+                  <span className="font-bold text-base block">{t.googleLogin}</span>
+                  <span className="text-[10px] text-maroon-400 opacity-60">
+                    {lang === 'ar' ? 'الدخول السريع بحساب جوجل' : 'Quick access with Google'}
+                  </span>
+                </div>
+              </div>
+              <ChevronLeft className={`w-4 h-4 text-maroon-600 group-hover:text-rose-400 transition-all ${lang === 'ar' ? '' : 'rotate-180'}`} />
+            </motion.button>
+
             <motion.button 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -1078,6 +1257,14 @@ export default function App() {
               {lang === 'ar' ? 'English Version' : 'النسخة العربية'}
             </button>
           </div>
+
+          {isIframe && (
+            <div className="text-[9px] text-rose-400/60 bg-rose-500/5 p-3 rounded-xl border border-rose-500/10 italic">
+              {lang === 'ar' 
+                ? 'ملاحظة: إذا واجهت مشكلة في الدخول بجوجل، يرجى فتح التطبيق في نافذة جديدة (الزر في الزاوية العلوية).'
+                : 'Note: If Google login fails, please open the app in a new tab (button in top corner).'}
+            </div>
+          )}
         </motion.div>
 
         {/* Admin Code Popup */}
@@ -1213,7 +1400,7 @@ export default function App() {
                 <div className="text-[10px] font-bold leading-tight line-clamp-1 max-w-[100px]">{currentUser?.name}</div>
               </div>
               <button 
-                onClick={() => setIsLoggedIn(false)}
+                onClick={() => logOut()}
                 className="p-1.5 hover:text-rose-400 transition-colors"
                 title={t.logout}
               >

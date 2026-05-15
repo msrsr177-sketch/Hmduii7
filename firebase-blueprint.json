@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "An inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "loc": { "type": "string" },
+        "brand": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "string" },
+        "image": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "quantity", "brand", "category"]
+    },
+    "Folder": {
+      "title": "Folder",
+      "description": "A folder for grouping products",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "count": { "type": "number" }
+      },
+      "required": ["id", "name", "categoryId"]
+    },
+    "MaintenanceRecord": {
+      "title": "MaintenanceRecord",
+      "description": "A customer maintenance card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "customerName": { "type": "string" },
+        "deviceType": { "type": "string" },
+        "issue": { "type": "string" },
+        "cost": { "type": "string" },
+        "isReady": { "type": "boolean" },
+        "entryDate": { "type": "string" },
+        "readyDate": { "type": "string", "format": "nullable" }
+      },
+      "required": ["id", "customerName", "deviceType", "isReady"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Log of user actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "desc": { "type": "string" },
+        "type": { "type": "string", "enum": ["add", "withdraw", "alert"] },
+        "time": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "title", "desc", "type", "time", "date"]
+    },
+    "PriceRecord": {
+      "title": "PriceRecord",
+      "description": "A price entry for a part",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "price"]
+    },
+    "CompatibilityRecord": {
+      "title": "CompatibilityRecord",
+      "description": "Device compatibility information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "deviceName": { "type": "string" },
+        "brand": { "type": "string" },
+        "compatibleItems": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "deviceName", "brand", "compatibleItems"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "type": { "type": "string", "enum": ["admin", "guest", "google"] },
+        "avatar": { "type": "string" }
+      },
+      "required": ["uid", "name", "type"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Inventory products"
+    },
+    "/folders/{folderId}": {
+      "schema": "Folder",
+      "description": "Folders for products"
+    },
+    "/maintenance_records/{recordId}": {
+      "schema": "MaintenanceRecord",
+      "description": "Maintenance cards"
+    },
+    "/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Activity log"
+    },
+    "/price_records/{priceId}": {
+      "schema": "PriceRecord",
+      "description": "Price list entries"
+    },
+    "/compatibility_records/{compId}": {
+      "schema": "CompatibilityRecord",
+      "description": "Compatibility list entries"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    }
+  }
+}
